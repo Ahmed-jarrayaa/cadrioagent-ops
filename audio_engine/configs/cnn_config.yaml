@@ -1,0 +1,17 @@
+experiment_name: "audio_benchmark_cnn"
+data_dir: "../ourdataset/processed"
+
+# Audio
+sr: 2000
+n_mels: 128
+n_fft: 512
+hop_length: 128
+target_time_frames: 256
+
+# Entraînement
+batch_size: 32
+epochs: 40
+lr: 0.001
+weight_decay: 0.0001
+dropout: 0.3
+num_workers: 0        # ⚠ Windows : 0 obligatoire pour éviter les erreurs

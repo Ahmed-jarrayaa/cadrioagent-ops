@@ -1,0 +1,10 @@
+# .dockerignore  (évite d'envoyer le dataset au build)
+ourdataset/
+.git/
+mlruns/
+*.gguf
+__pycache__/
+.venv/
+# cache des spectrogrammes Mel du CNN (~1,4 Go) : inutile dans l'image, il ne sert qu'à l'entraînement
+audio_engine/models/tp3_cnn_mels.npy
+audio_engine/models/tp3_cnn_mels_index.npz

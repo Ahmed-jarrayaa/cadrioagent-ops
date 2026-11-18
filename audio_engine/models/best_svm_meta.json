@@ -1,0 +1,131 @@
+{
+  "model": "Pipeline(StandardScaler, SVC(kernel='rbf', class_weight='balanced'))",
+  "file": "C:\\Users\\Admin\\Desktop\\Semester_1_3GMAM\\Data Mining\\audio_engine\\models\\best_svm.joblib",
+  "created_at": "2026-11-17 13:59:24",
+  "best_params": {
+    "svc__C": 1,
+    "svc__gamma": 0.01
+  },
+  "cv": "GridSearchCV + GroupKFold(3) groupé par enregistrement",
+  "cv_balanced_accuracy": 0.8717216834705389,
+  "fold_metrics": [
+    {
+      "fold": 1,
+      "best_params": {
+        "svc__C": 1,
+        "svc__gamma": 0.01
+      },
+      "accuracy": 0.8633799362276183,
+      "balanced_accuracy": 0.8873842782166417,
+      "macro_precision": 0.8126878025696503,
+      "macro_recall": 0.8873842782166417,
+      "macro_f1": 0.8348312709143944,
+      "roc_auc": 0.9400277002024499
+    },
+    {
+      "fold": 2,
+      "best_params": {
+        "svc__C": 1,
+        "svc__gamma": 0.01
+      },
+      "accuracy": 0.8565137614678899,
+      "balanced_accuracy": 0.8804461871186171,
+      "macro_precision": 0.8093255666825026,
+      "macro_recall": 0.8804461871186171,
+      "macro_f1": 0.8296182657769023,
+      "roc_auc": 0.933253524005793
+    },
+    {
+      "fold": 3,
+      "best_params": {
+        "svc__C": 1,
+        "svc__gamma": 0.01
+      },
+      "accuracy": 0.8568294654196975,
+      "balanced_accuracy": 0.8800560121669194,
+      "macro_precision": 0.8085434640971627,
+      "macro_recall": 0.8800560121669194,
+      "macro_f1": 0.829170771583549,
+      "roc_auc": 0.9345218344524491
+    }
+  ],
+  "mean_metrics": {
+    "accuracy": 0.8589077210384021,
+    "balanced_accuracy": 0.8826288258340593,
+    "macro_precision": 0.8101856111164385,
+    "macro_recall": 0.8826288258340593,
+    "macro_f1": 0.8312067694249485,
+    "roc_auc": 0.9359343528868974
+  },
+  "baseline_tp_macro_precision": 0.6102899293688767,
+  "features": {
+    "source": "preprocess.Preprocessor",
+    "n_features": 46,
+    "names": [
+      "mfcc0_mean",
+      "mfcc1_mean",
+      "mfcc2_mean",
+      "mfcc3_mean",
+      "mfcc4_mean",
+      "mfcc5_mean",
+      "mfcc6_mean",
+      "mfcc7_mean",
+      "mfcc8_mean",
+      "mfcc9_mean",
+      "mfcc10_mean",
+      "mfcc11_mean",
+      "mfcc12_mean",
+      "mfcc13_mean",
+      "mfcc14_mean",
+      "mfcc15_mean",
+      "mfcc16_mean",
+      "mfcc17_mean",
+      "mfcc18_mean",
+      "mfcc19_mean",
+      "mfcc0_std",
+      "mfcc1_std",
+      "mfcc2_std",
+      "mfcc3_std",
+      "mfcc4_std",
+      "mfcc5_std",
+      "mfcc6_std",
+      "mfcc7_std",
+      "mfcc8_std",
+      "mfcc9_std",
+      "mfcc10_std",
+      "mfcc11_std",
+      "mfcc12_std",
+      "mfcc13_std",
+      "mfcc14_std",
+      "mfcc15_std",
+      "mfcc16_std",
+      "mfcc17_std",
+      "mfcc18_std",
+      "mfcc19_std",
+      "zcr_mean",
+      "zcr_std",
+      "centroid_mean",
+      "centroid_std",
+      "rms_mean",
+      "rms_std"
+    ],
+    "sample_rate": 2000,
+    "segment_sec": 5.0,
+    "hop_sec": 2.5
+  },
+  "labels": {
+    "0": "normal",
+    "1": "abnormal"
+  },
+  "n_segments": 24990,
+  "n_recordings": 3779,
+  "class_counts": {
+    "normal": 18886,
+    "abnormal": 6104
+  },
+  "versions": {
+    "sklearn": "1.7.2",
+    "librosa": "0.11.0"
+  },
+  "usage": "clf = joblib.load('models/best_svm.joblib'); sig = pre.load_clean(open(wav, 'rb').read()); X = pre.batch(pre.segment(sig), 'features'); clf.predict(X)"
+}

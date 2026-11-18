@@ -1,0 +1,6 @@
+# api-gateway
+fastapi
+uvicorn
+python-multipart
+httpx
+pydantic>=2

@@ -1,0 +1,117 @@
+import os
+import httpx
+from fastapi import FastAPI, UploadFile, File, HTTPException
+
+app = FastAPI(title="CardioAgent-Ops API")
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+AUDIO = os.getenv("AUDIO_ENGINE_URL", "http://audio-engine:8001")
+ORCH = os.getenv("ORCHESTRATOR_URL", "http://agent-orchestrator:8002")
+MLFLOW = os.getenv("MLFLOW_URL", os.getenv("MLFLOW_TRACKING_URI", "http://mlflow-server:5000"))
+
+@app.get("/")
+def root():
+    return {
+        "service": "CardioAgent-Ops API Gateway",
+        "status": "ok",
+        "docs": "/docs",
+        "endpoints": ["/health", "/analyze_pcg", "/predict", "/analyze_all", "/predict_one",
+                      "/models", "/mlflow/experiments"],
+    }
+
+@app.get("/health")
+async def health():
+    services = {"api-gateway": "ok"}
+    async with httpx.AsyncClient(timeout=5) as client:
+        for name, url in (("audio-engine", f"{AUDIO}/health"), ("orchestrator", f"{ORCH}/health"), ("mlflow", f"{MLFLOW}/health")):
+            try:
+                r = await client.get(url)
+                services[name] = {"status": "ok", "http": r.status_code, "body": (r.json() if "application/json" in r.headers.get("content-type","") else r.text[:120])}
+            except Exception as e:
+                services[name] = {"status": "down", "error": str(e)}
+    return {"status": "ok", "services": services}
+
+@app.post("/analyze_pcg")
+async def analyze_pcg(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".wav"):
+        raise HTTPException(400, "Fichier .wav requis")
+    data = await file.read()
+    async with httpx.AsyncClient(timeout=120) as client:
+        r1 = await client.post(f"{AUDIO}/predict",
+                               files={"file": (file.filename, data, "audio/wav")})
+        r1.raise_for_status()
+        r2 = await client.post(f"{ORCH}/analyze", json=r1.json())
+        r2.raise_for_status()
+    return r2.json()
+
+
+@app.post("/predict")
+async def predict(file: UploadFile = File(...)):
+    """Proxy direct vers audio-engine /predict (ONNX)."""
+    if not file.filename.lower().endswith(".wav"):
+        raise HTTPException(400, "Fichier .wav requis")
+    data = await file.read()
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(f"{AUDIO}/predict", files={"file": (file.filename, data, "audio/wav")})
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
+
+@app.post("/analyze_all")
+async def analyze_all(file: UploadFile = File(...), families: str | None = None):
+    """Applique les modèles TP3 (SVM, arbre de décision, CNN) enregistrés dans MLflow."""
+    if not file.filename.lower().endswith(".wav"):
+        raise HTTPException(400, "Fichier .wav requis")
+    data = await file.read()
+    params = {"families": families} if families else None
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(f"{AUDIO}/predict_all", params=params,
+                              files={"file": (file.filename, data, "audio/wav")})
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
+
+@app.post("/predict_one")
+async def predict_one(file: UploadFile = File(...), family: str = "svm"):
+    """Proxy vers audio-engine /predict_one : un seul algorithme (svm | tree | cnn)."""
+    if not file.filename.lower().endswith(".wav"):
+        raise HTTPException(400, "Fichier .wav requis")
+    data = await file.read()
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(f"{AUDIO}/predict_one", params={"family": family},
+                              files={"file": (file.filename, data, "audio/wav")})
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
+
+@app.get("/models")
+async def models():
+    """Modèles TP3 disponibles (seuil, run MLflow, métriques) via audio-engine."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            r = await client.get(f"{AUDIO}/models")
+            if r.status_code >= 400:
+                raise HTTPException(r.status_code, r.text)
+            return r.json()
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, f"audio-engine indisponible: {e}")
+
+
+@app.get("/mlflow/experiments")
+async def mlflow_experiments():
+    """Proxy léger vers l'API REST MLflow (liste des expériences)."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            r = await client.get(f"{MLFLOW}/api/2.0/mlflow/experiments/search", params={"max_results": 50})
+            if r.status_code >= 400:
+                raise HTTPException(r.status_code, r.text)
+            return r.json()
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, f"MLflow indisponible: {e}")

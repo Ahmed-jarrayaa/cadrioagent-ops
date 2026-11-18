@@ -1,0 +1,43 @@
+# =============================================================================
+# CardioAgent-Ops — fichiers exclus du dépôt
+# =============================================================================
+
+# --- Environnements virtuels et caches Python ---------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Secrets et configuration locale ------------------------------------------
+.env
+.env.*
+
+# --- Exclusions demandées / imposées ------------------------------------------
+# Archive locale de audio_engine (doublon de audio_engine/, non versionnée)
+audio_engine.zip
+# Variante enrichie de l'interface conservée uniquement en local
+CardioAgent-Ops-interface-enrichie.html
+
+# --- Fichiers dépassant la limite GitHub de 100 Mo ----------------------------
+# Spectrogrammes Mel mis en cache pour l'entraînement du CNN (1,38 Go)
+audio_engine/models/tp3_cnn_mels.npy
+# Caches Mel du dataset (jusqu'à 955 Mo par fichier)
+ourdataset/processed/mel_cache_cnn/
+
+# --- Artefacts MLflow locaux ---------------------------------------------------
+mlruns/
+mlruns.db
+mlflow.db
+
+# --- Poids de LLM (volumineux, à télécharger séparément) ----------------------
+*.gguf
+
+# --- Divers OS / éditeurs ------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

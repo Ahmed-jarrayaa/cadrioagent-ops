@@ -1,0 +1,12 @@
+numpy
+pandas
+scipy
+scikit-learn
+librosa
+soundfile
+joblib
+matplotlib
+mlflow==2.16.2
+skl2onnx
+onnx
+onnxruntime==1.20.1

@@ -1,0 +1,15 @@
+{
+  "model": "SVM",
+  "kernel": "rbf",
+  "C": 1.0,
+  "gamma": 0.01,
+  "class_weight": "balanced",
+  "probability": true,
+  "random_state": 42,
+  "min_specificity": 0.8,
+  "threshold_selection": "max Recall(abnormal) on validation subject to specificity >= MIN_SPECIFICITY",
+  "selected_by": "validation recall (abnormal), specificity >= 0.80",
+  "mlflow_experiment": "audio_benchmark_svm",
+  "mlflow_run_name": "svm_rbf_C1_gamma_0.01",
+  "mlflow_run_id": "fff20782cbb1464c8f520a412a2f7a78"
+}

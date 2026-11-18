@@ -1,0 +1,41 @@
+{
+  "dataset": "ourdataset/processed/dataset_2000hz.npz",
+  "regenerated_from": "ourdataset/train/{normal,abnormal} via audio_engine/prepare_data.py (fixed: filename-label conflict exclusion)",
+  "summary": {
+    "wav_files_found": 3784,
+    "ok_recordings": 3777,
+    "excluded_too_short": 3,
+    "excluded_filename_label_conflict": 4,
+    "conflicting_filenames_excluded": ["201106141148.wav", "237_1308750231222_C.wav"],
+    "total_segments": 22132,
+    "segments_by_split": {"train": 15286, "val": 3397, "test": 3439},
+    "labels": {"normal": 0, "abnormal": 1}
+  },
+  "conflict_resolution": [
+    {
+      "file": "201106141148.wav",
+      "issue": "Même nom présent dans normal/ et abnormal/ avec contenus différents (MD5 différents) -> collision de nom/label",
+      "copies": [
+        {"folder": "normal", "bytes": 507166, "md5": "a0a06e265b942c4cc8291f94f46d12ed", "feature_distance_to_normal_centroid": 9.511, "feature_distance_to_abnormal_centroid": 11.049, "closer_to": "normal"},
+        {"folder": "abnormal", "bytes": 526330, "md5": "3d53617d4521d69f5d41c7548be0013f", "feature_distance_to_normal_centroid": 9.350, "feature_distance_to_abnormal_centroid": 10.850, "closer_to": "normal"}
+      ],
+      "action": "EXCLU des 2 côtés (impossible de trancher avec certitude sans référence officielle; exclusion élimine la corruption de labels)"
+    },
+    {
+      "file": "237_1308750231222_C.wav",
+      "issue": "Même nom présent dans normal/ et abnormal/ avec contenus différents (MD5 différents)",
+      "copies": [
+        {"folder": "normal", "bytes": 11586, "md5": "0736a72400b8b1a7c233e1d83dd37838", "feature_distance_to_normal_centroid": 5.991, "feature_distance_to_abnormal_centroid": 6.745, "closer_to": "normal"},
+        {"folder": "abnormal", "bytes": 28986, "md5": "5f7d97536ebb5184742e2158fb956af7", "feature_distance_to_normal_centroid": 4.845, "feature_distance_to_abnormal_centroid": 5.991, "closer_to": "normal"}
+      ],
+      "action": "EXCLU des 2 côtés"
+    }
+  ],
+  "integrity_checks": {
+    "folder_vs_label_mismatch": 0,
+    "md5_label_conflicts": 0,
+    "missing_files": 0,
+    "npz_recording_label_collisions_after_fix": 0
+  },
+  "model_based_review_note": "Un test centroïde signale 996/3779 enregistrements en désaccord (classifieur faible, non preuve de mislabel). Ces cas sont conservés avec leur label dossier d'origine; revue manuelle/clinique recommandée pour les cas à forte marge si nécessaire. Les modèles SVM/RF sur features complètes atteignent ~0.93 AUC, ce qui indique une séparabilité globale cohérente."
+}

@@ -1,0 +1,1783 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>CardioAgent-Ops — Analyse PCG assistée</title>
+<meta name="description" content="Importez un signal PCG au format WAV, lancez l'analyse automatique SVM, arbre de décision et CNN, puis consultez le consensus et les recommandations.">
+<style>
+:root{
+  --navy-950:#071827; --navy-900:#0a2135; --navy-800:#0e2d46; --navy-700:#143c58;
+  --petrol-900:#083a44; --petrol-800:#0b4a57; --petrol-700:#0e5c6c; --petrol-600:#117284;
+  --petrol-500:#16899d; --petrol-100:#dceff2; --petrol-050:#eef8fa;
+  --bg:#f3f7f9; --surface:#fff; --surface-2:#f8fbfc; --line:#dfe9ed; --line-strong:#c9d9df;
+  --ink:#0b2233; --ink-2:#244154; --muted:#617886; --muted-2:#8295a0;
+  --ok:#0f7a5a; --ok-bg:#e8f6f0; --ok-line:#bfe7d8;
+  --warn:#a55a0b; --warn-bg:#fff6e8; --warn-line:#f2d6ae;
+  --danger:#b42318; --danger-bg:#fdf0ef; --danger-line:#f3c7c3;
+  --shadow-sm:0 1px 2px rgba(10,33,53,.05);
+  --shadow-md:0 12px 32px rgba(10,33,53,.07);
+  --shadow-lg:0 24px 60px rgba(10,33,53,.1);
+  --radius:20px; --radius-sm:12px;
+  --font:"Inter","Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth;scroll-padding-top:86px}
+body{
+  margin:0;color:var(--ink);background:var(--bg);font:15px/1.6 var(--font);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(circle at 12% 0%,rgba(17,114,132,.09),transparent 30%),
+             radial-gradient(circle at 88% 8%,rgba(10,33,53,.055),transparent 28%);
+}
+.svg-sprite{position:absolute;width:0;height:0;overflow:hidden}
+.icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.app-shell{min-height:100vh;display:flex;flex-direction:column}
+.topbar{
+  position:sticky;top:0;z-index:30;background:rgba(255,255,255,.88);
+  border-bottom:1px solid rgba(223,233,237,.92);backdrop-filter:blur(16px);
+}
+.topbar-inner{
+  max-width:1320px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;
+  justify-content:space-between;gap:16px;
+}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;min-width:0}
+.brand-mark{
+  width:42px;height:42px;flex:0 0 auto;border-radius:13px;display:grid;place-items:center;
+  color:#fff;background:linear-gradient(145deg,var(--navy-900),var(--petrol-700));
+  box-shadow:0 7px 18px rgba(10,33,53,.2);
+}
+.brand-mark .icon{width:24px;height:24px;stroke-width:2.1}
+.brand-text{min-width:0}
+.brand-text strong{display:block;color:var(--navy-900);font-size:1.02rem;letter-spacing:-.025em}
+.brand-text strong span{color:var(--petrol-600)}
+.brand-text small{display:block;margin-top:1px;color:var(--muted);font-size:.72rem;letter-spacing:.015em}
+.topbar-actions{display:flex;align-items:center;gap:10px}
+.service-chip{
+  display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:8px 13px;
+  border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink-2);
+  font:650 .78rem var(--font);cursor:pointer;transition:border-color .18s,background .18s,box-shadow .18s;
+}
+.service-chip:hover{border-color:var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-sm)}
+.service-chip:focus-visible{outline:0;box-shadow:0 0 0 4px rgba(22,137,157,.16);border-color:var(--petrol-500)}
+.status-dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:var(--muted-2);box-shadow:0 0 0 4px rgba(130,149,160,.12)}
+.service-chip.is-ready .status-dot{background:var(--ok);box-shadow:0 0 0 4px rgba(15,122,90,.12)}
+.service-chip.is-partial .status-dot{background:var(--warn);box-shadow:0 0 0 4px rgba(165,90,11,.12)}
+.service-chip.is-down .status-dot{background:var(--danger);box-shadow:0 0 0 4px rgba(180,35,24,.12)}
+.service-chip.is-checking .status-dot{animation:pulse 1.4s infinite}
+.page{width:100%;max-width:1320px;margin:0 auto;padding:28px 28px 56px;flex:1}
+
+/* ---------- Hero ---------- */
+.hero{
+  position:relative;isolation:isolate;overflow:hidden;border-radius:28px;
+  padding:clamp(28px,4vw,48px);color:#fff;box-shadow:var(--shadow-lg);
+  background:linear-gradient(120deg,var(--navy-950) 0%,var(--navy-900) 42%,var(--petrol-800) 100%);
+}
+.hero::before{
+  content:"";position:absolute;inset:0;z-index:-1;
+  background:radial-gradient(circle at 78% 8%,rgba(143,211,220,.19),transparent 30%),
+             radial-gradient(circle at 8% 92%,rgba(22,137,157,.2),transparent 34%);
+}
+.hero-bg{position:absolute;inset:0;z-index:-1;opacity:.13;pointer-events:none;overflow:hidden}
+.hero-bg svg{width:100%;height:100%}
+.hero-content{position:relative;display:grid;grid-template-columns:minmax(0,1.28fr) minmax(330px,.72fr);gap:40px;align-items:end}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:7px;color:#9bd8e0;font-size:.68rem;
+  font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+}
+.eyebrow .icon{width:15px;height:15px}
+.hero h1{margin:14px 0 13px;font-size:clamp(2rem,4vw,3.2rem);font-weight:760;line-height:1.05;letter-spacing:-.05em}
+.hero h1 em{font-style:normal;color:#8fd3dc}
+.hero p{margin:0;max-width:63ch;color:#c7dbe2;font-size:1rem;line-height:1.72}
+.stepper{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.step{
+  display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.055);
+  backdrop-filter:blur(6px);transition:background .2s,border-color .2s;
+}
+.step-num{
+  width:32px;height:32px;flex:0 0 auto;display:grid;place-items:center;border-radius:10px;
+  background:rgba(255,255,255,.12);color:#fff;font-size:.76rem;font-weight:800;
+}
+.step-text{min-width:0}
+.step-text strong{display:block;font-size:.86rem;line-height:1.25}
+.step-text small{display:block;margin-top:2px;color:#b9d0d8;font-size:.72rem;line-height:1.3}
+.step.is-active{border-color:rgba(143,211,220,.46);background:rgba(255,255,255,.12)}
+.step.is-active .step-num{background:#fff;color:var(--navy-900)}
+.step.is-done .step-num{background:var(--petrol-500);color:#fff}
+.step.is-done .step-num::after{content:"✓";font-size:.82rem}
+.step.is-done .step-num{font-size:0}
+
+/* ---------- Workspace & cards ---------- */
+.workspace{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.75fr);gap:20px;margin-top:20px;align-items:start}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-md);padding:24px;min-width:0;
+}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.card-head.compact{margin-bottom:14px}
+.section-kicker{
+  display:block;margin-bottom:6px;color:var(--petrol-700);font-size:.68rem;font-weight:800;
+  letter-spacing:.12em;text-transform:uppercase;
+}
+.card h2{margin:0;color:var(--navy-900);font-size:1.15rem;line-height:1.3;letter-spacing:-.02em}
+.card-head p{margin:6px 0 0;max-width:62ch;color:var(--muted);font-size:.85rem;line-height:1.6}
+.file-pill{
+  display:flex;align-items:center;gap:8px;max-width:280px;padding:7px 10px;border:1px solid var(--line);
+  border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-size:.75rem;white-space:nowrap;
+}
+.file-pill .icon{width:15px;height:15px;flex:0 0 auto;color:var(--petrol-600)}
+.file-pill #fileName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.pill-action{border:0;background:transparent;color:var(--petrol-700);font:750 .73rem var(--font);cursor:pointer;padding:0 0 0 3px}
+.pill-action:hover{color:var(--petrol-900);text-decoration:underline}
+.action-card{position:sticky;top:84px}
+.action-body{display:grid;gap:15px}
+.readiness{display:grid;gap:8px}
+.ready-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:11px;background:var(--surface-2);color:var(--muted);font-size:.81rem;font-weight:600;
+  transition:border-color .2s,background .2s,color .2s;
+}
+.ready-icon{
+  width:22px;height:22px;flex:0 0 auto;display:grid;place-items:center;border-radius:50%;
+  background:#e9eff2;color:#93a6b0;
+}
+.ready-icon .icon{width:13px;height:13px;stroke-width:2.4}
+.ready-item.is-ready{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ink-2)}
+.ready-item.is-ready .ready-icon{background:var(--ok);color:#fff}
+.ready-item.is-down{border-color:var(--danger-line);background:var(--danger-bg);color:var(--danger)}
+.ready-item.is-down .ready-icon{background:var(--danger);color:#fff}
+.btn-primary{
+  position:relative;overflow:hidden;width:100%;min-height:56px;display:flex;align-items:center;gap:10px;
+  justify-content:center;padding:14px 18px;border:1px solid transparent;border-radius:14px;
+  background:linear-gradient(135deg,var(--petrol-700),var(--petrol-600));color:#fff;
+  font:750 .95rem var(--font);letter-spacing:.005em;cursor:pointer;
+  box-shadow:0 12px 24px rgba(14,92,108,.24);
+  transition:transform .18s,box-shadow .18s,filter .18s,background .18s;
+}
+.btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 16px 30px rgba(14,92,108,.3);filter:brightness(1.04)}
+.btn-primary:active:not(:disabled){transform:translateY(0)}
+.btn-primary:focus-visible{outline:0;box-shadow:0 0 0 4px rgba(22,137,157,.22),0 12px 24px rgba(14,92,108,.24)}
+.btn-primary:disabled{background:#dce6ea;color:#7d909b;box-shadow:none;cursor:not-allowed}
+.btn-primary .icon{width:19px;height:19px;stroke-width:2}
+.btn-primary .btn-arrow{margin-left:auto;transition:transform .18s}
+.btn-primary:hover:not(:disabled) .btn-arrow{transform:translateX(3px)}
+.btn-primary.is-loading .btn-arrow,.btn-primary.is-loading .btn-label{display:none}
+.spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .85s linear infinite}
+.btn-primary.is-loading .spinner{display:block}
+.action-note{margin:0;color:var(--muted);font-size:.77rem;line-height:1.55;text-align:center}
+.model-strip{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.model-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line);
+  border-radius:999px;background:#fff;color:var(--muted);font-size:.71rem;font-weight:700;
+  transition:border-color .2s,background .2s,color .2s;
+}
+.model-dot{width:6px;height:6px;flex:0 0 auto;border-radius:50%;background:var(--petrol-500)}
+.model-strip.is-running .model-chip{border-color:var(--petrol-100);background:var(--petrol-050);color:var(--petrol-800)}
+.model-strip.is-running .model-dot{animation:pulse 1.1s infinite}
+.status-line{
+  display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border:1px solid var(--line);
+  border-radius:11px;background:var(--surface-2);color:var(--muted);font-size:.77rem;line-height:1.5;
+  transition:border-color .2s,background .2s,color .2s;
+}
+.status-line .icon{width:15px;height:15px;flex:0 0 auto;margin-top:2px;color:var(--petrol-600)}
+.status-line.is-busy{border-color:var(--petrol-100);background:var(--petrol-050);color:var(--petrol-800)}
+.status-line.is-error{border-color:var(--danger-line);background:var(--danger-bg);color:var(--danger)}
+.status-line.is-success{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ok)}
+.loading-bar{height:3px;border-radius:999px;background:var(--petrol-100);overflow:hidden}
+.loading-bar span{display:block;width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--petrol-500),var(--petrol-700));animation:indeterminate 1.15s ease-in-out infinite}
+.inline-error{margin:10px 0 0;padding:10px 12px;border:1px solid var(--danger-line);border-radius:10px;background:var(--danger-bg);color:var(--danger);font-size:.78rem;line-height:1.5}
+/* ---------- Signal stage ---------- */
+.stage{position:relative;height:340px;border:1.5px dashed var(--line-strong);border-radius:16px;background:linear-gradient(180deg,#fbfdfe,#f5fafb);overflow:hidden;transition:border-color .2s,box-shadow .2s,background .2s}
+.stage.has-signal{border-style:solid;border-color:var(--line);background:#fff;cursor:crosshair}
+.stage.drag{border-color:var(--petrol-500);background:var(--petrol-050);box-shadow:inset 0 0 0 4px rgba(17,114,132,.08)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#wave{z-index:1}
+#overlay{z-index:2;pointer-events:none}
+.empty-state{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:24px;text-align:center;cursor:pointer;color:var(--ink-2);transition:background .2s}
+.empty-state:hover{background:rgba(238,248,250,.56)}
+.empty-icon{width:64px;height:64px;margin-bottom:6px;display:grid;place-items:center;border-radius:20px;border:1px solid var(--petrol-100);background:var(--petrol-050);color:var(--petrol-700)}
+.empty-icon .icon{width:30px;height:30px;stroke-width:1.7}
+.empty-state strong{font-size:1rem;color:var(--navy-900)}
+.empty-state span{color:var(--muted);font-size:.86rem}
+.empty-state small{margin-top:8px;color:var(--muted-2);font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.plot-tools{position:absolute;z-index:5;top:12px;right:12px;display:flex;gap:5px;padding:5px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);box-shadow:var(--shadow-sm)}
+.icon-btn{width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--ink-2);cursor:pointer;transition:background .15s,color .15s}
+.icon-btn:hover{background:var(--petrol-050);color:var(--petrol-700)}
+.icon-btn:focus-visible{outline:0;box-shadow:0 0 0 3px rgba(22,137,157,.18)}
+.icon-btn .icon{width:17px;height:17px}
+.readout{position:absolute;z-index:6;padding:5px 8px;border-radius:7px;background:rgba(7,24,39,.88);color:#fff;font:600 .71rem var(--mono);white-space:nowrap;pointer-events:none;box-shadow:0 4px 12px rgba(7,24,39,.18)}
+.plot-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px}
+.plot-hint{display:flex;align-items:center;gap:6px;margin:0;color:var(--muted-2);font-size:.75rem}
+.plot-hint .icon{width:14px;height:14px;flex:0 0 auto}
+.format-note{color:var(--muted-2);font-size:.73rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52%}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:18px 0 0;padding-top:18px;border-top:1px solid var(--line)}
+.stat{padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);min-width:0}
+.stat dt{color:var(--muted-2);font-size:.67rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.stat dd{margin:4px 0 0;color:var(--navy-900);font-size:.94rem;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.feature-strip{margin-top:14px;padding:14px;border:1px solid var(--petrol-100);border-radius:14px;background:var(--petrol-050)}
+.feature-strip-head{display:flex;align-items:center;gap:8px;color:var(--petrol-800);font-size:.76rem;font-weight:800;letter-spacing:.03em}
+.feature-strip-head .icon{width:15px;height:15px}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px;margin-top:10px}
+.feature{padding:9px 11px;border:1px solid rgba(17,114,132,.14);border-radius:10px;background:rgba(255,255,255,.72)}
+.feature span{display:block;color:var(--muted);font-size:.67rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.feature strong{display:block;margin-top:2px;color:var(--navy-900);font-size:.9rem;font-variant-numeric:tabular-nums}
+
+/* ---------- Getting started ---------- */
+.getting-started{margin-top:22px}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:0 2px 14px}
+.section-heading h2{margin:0;color:var(--navy-900);font-size:1.28rem;letter-spacing:-.025em}
+.steps-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.step-card{position:relative;padding:20px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.78);box-shadow:var(--shadow-sm);overflow:hidden}
+.step-card::after{content:"";position:absolute;right:-20px;bottom:-34px;width:96px;height:96px;border-radius:50%;background:var(--petrol-050)}
+.step-badge{position:relative;z-index:1;display:inline-grid;place-items:center;width:32px;height:32px;margin-bottom:12px;border-radius:10px;background:var(--petrol-050);color:var(--petrol-700);font-size:.76rem;font-weight:800}
+.step-card h3{position:relative;z-index:1;margin:0 0 5px;color:var(--navy-900);font-size:.92rem}
+.step-card p{position:relative;z-index:1;margin:0;color:var(--muted);font-size:.81rem;line-height:1.6}
+
+/* ---------- Results ---------- */
+.results{margin-top:26px;scroll-margin-top:86px;animation:rise .4s ease both}
+.results-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:0 2px 14px}
+.results-head h2{margin:0;color:var(--navy-900);font-size:1.45rem;letter-spacing:-.03em}
+.results-head p{margin:5px 0 0;color:var(--muted);font-size:.84rem;max-width:70ch}
+.result-time{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:.72rem;white-space:nowrap}
+.result-time .icon{width:13px;height:13px}
+.global-card{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;border-left:5px solid var(--petrol-600)}
+.global-card.is-danger{border-left-color:var(--danger);background:linear-gradient(100deg,#fff 0%,#fff 62%,#fdf5f4 100%)}
+.global-card.is-success{border-left-color:var(--ok);background:linear-gradient(100deg,#fff 0%,#fff 62%,#f3faf7 100%)}
+.global-card.is-neutral{border-left-color:var(--muted-2);background:linear-gradient(100deg,#fff 0%,#fff 62%,#f7fafb 100%)}
+.global-main{display:flex;align-items:flex-start;gap:16px;min-width:0}
+.result-icon{width:54px;height:54px;flex:0 0 auto;display:grid;place-items:center;border-radius:16px;background:var(--petrol-050);color:var(--petrol-700);border:1px solid var(--petrol-100)}
+.global-card.is-danger .result-icon{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
+.global-card.is-success .result-icon{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
+.global-card.is-neutral .result-icon{background:#eef2f4;color:var(--muted);border-color:var(--line)}
+.result-icon .icon{width:27px;height:27px;stroke-width:1.8}
+.global-copy{min-width:0}
+.global-copy h2{margin:0;font-size:clamp(1.5rem,2.4vw,2rem);line-height:1.15;letter-spacing:-.035em;color:var(--navy-900)}
+.global-copy p{margin:7px 0 0;max-width:68ch;color:var(--muted);font-size:.88rem;line-height:1.65}
+.result-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink-2);font-size:.71rem;font-weight:700}
+.chip .icon{width:13px;height:13px}
+.chip.is-success{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ok)}
+.chip.is-danger{border-color:var(--danger-line);background:var(--danger-bg);color:var(--danger)}
+.chip.is-warning{border-color:var(--warn-line);background:var(--warn-bg);color:var(--warn)}
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:9px;min-width:156px}
+.gauge{width:150px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--gauge-color,var(--petrol-600)) calc(var(--value,0)*1%),#e6eef2 0);transition:background .3s}
+.gauge::before{content:"";grid-area:1/1;width:118px;aspect-ratio:1;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px rgba(223,233,237,.7)}
+.gauge-inner{grid-area:1/1;z-index:1;text-align:center;display:grid;gap:1px;padding:8px}
+.gauge-inner strong{color:var(--navy-900);font-size:1.35rem;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.gauge-inner span{color:var(--muted);font-size:.62rem;font-weight:700;line-height:1.25}
+.gauge-caption{margin:0;color:var(--muted);font-size:.7rem;text-align:center}
+.gauge-caption strong{color:var(--ink-2)}
+.result-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:20px}
+.consensus-badge{display:inline-flex;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-size:.68rem;font-weight:800;white-space:nowrap}
+.consensus-badge.is-danger{border-color:var(--danger-line);background:var(--danger-bg);color:var(--danger)}
+.consensus-badge.is-success{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ok)}
+.vote-bar{display:flex;height:12px;border-radius:999px;background:#eef2f4;overflow:hidden}
+.vote-seg{display:flex;align-items:center;justify-content:center;min-width:0;color:#fff;font-size:.62rem;font-weight:800;transition:flex .3s}
+.vote-seg.normal{background:var(--petrol-600)}
+.vote-seg.abnormal{background:var(--danger)}
+.vote-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:9px;color:var(--muted);font-size:.73rem}
+.vote-legend span{display:inline-flex;align-items:center;gap:6px}
+.legend-dot{width:7px;height:7px;border-radius:50%;background:var(--petrol-600)}
+.legend-dot.abnormal{background:var(--danger)}
+.vote-list{display:grid;gap:7px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.vote-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.vote-model{display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:.8rem;font-weight:650;min-width:0}
+.vote-model span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-avatar{width:32px;height:32px;flex:0 0 auto;display:grid;place-items:center;border-radius:10px;background:var(--navy-900);color:#fff;font-size:.64rem;font-weight:800;letter-spacing:.02em}
+.model-avatar.sm{width:25px;height:25px;border-radius:8px;font-size:.56rem}
+.consensus-note{margin-top:12px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--muted);font-size:.74rem;line-height:1.5}
+.recommendations-card{background:linear-gradient(180deg,#fff,#fbfdfe)}
+.recommendation-main{padding:14px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.recommendation-main.is-danger{border-color:var(--danger-line);background:var(--danger-bg)}
+.recommendation-main.is-success{border-color:var(--ok-line);background:var(--ok-bg)}
+.recommendation-main.is-warning{border-color:var(--warn-line);background:var(--warn-bg)}
+.rec-title{display:flex;align-items:center;gap:8px;margin:0 0 5px;color:var(--navy-900);font-size:.87rem;font-weight:800}
+.rec-title .icon{width:17px;height:17px;color:var(--petrol-700)}
+.recommendation-main.is-danger .rec-title .icon{color:var(--danger)}
+.recommendation-main.is-success .rec-title .icon{color:var(--ok)}
+.recommendation-main.is-warning .rec-title .icon{color:var(--warn)}
+.recommendation-main p{margin:0;color:var(--ink-2);font-size:.78rem;line-height:1.6}
+.recommendation-list{list-style:none;display:grid;gap:8px;margin:13px 0 0;padding:0}
+.recommendation-list li{display:flex;align-items:flex-start;gap:8px;color:var(--ink-2);font-size:.78rem;line-height:1.5}
+.recommendation-list .icon{width:14px;height:14px;flex:0 0 auto;margin-top:3px;color:var(--petrol-600)}
+.quality-note{margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}
+.quality-note h3{display:flex;align-items:center;gap:6px;margin:0 0 5px;color:var(--ink-2);font-size:.73rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase}
+.quality-note h3 .icon{width:13px;height:13px;color:var(--muted)}
+.quality-note ul{list-style:none;display:grid;gap:4px;margin:0;padding:0}
+.quality-note li{display:flex;gap:7px;color:var(--muted);font-size:.74rem;line-height:1.5}
+.quality-note li::before{content:"";width:5px;height:5px;flex:0 0 auto;margin-top:6px;border-radius:50%;background:var(--line-strong)}
+.models-card{margin-top:20px}
+.model-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:13px}
+.model-card{padding:15px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);min-width:0}
+.model-card.is-error{border-color:var(--danger-line);background:var(--danger-bg)}
+.model-card-head{display:flex;align-items:center;gap:9px;min-width:0}
+.model-card-head>div{min-width:0;flex:1}
+.model-card-head strong{display:block;color:var(--navy-900);font-size:.82rem;line-height:1.25}
+.model-card-head small{display:block;margin-top:1px;color:var(--muted-2);font-size:.67rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:.64rem;font-weight:800;white-space:nowrap;border:1px solid transparent}
+.badge.normal{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ok)}
+.badge.abnormal{border-color:var(--danger-line);background:var(--danger-bg);color:var(--danger)}
+.badge.unknown,.badge.error{border-color:var(--line);background:#eef2f4;color:var(--muted)}
+.model-prob{display:flex;align-items:baseline;gap:6px;margin-top:14px}
+.model-prob-value{color:var(--navy-900);font-size:1.45rem;font-weight:800;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.model-prob-label{color:var(--muted);font-size:.7rem;font-weight:650}
+.prob-track{position:relative;height:8px;margin-top:9px;border-radius:999px;background:#e6edf0;overflow:visible}
+.prob-fill{display:block;height:100%;border-radius:999px;background:var(--petrol-600);transition:width .5s ease}
+.model-card .prob-fill.is-abnormal{background:var(--danger)}
+.threshold-marker{position:absolute;top:-3px;bottom:-3px;width:2px;border-radius:2px;background:var(--navy-800)}
+.threshold-marker::after{content:"";position:absolute;left:50%;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--navy-800);transform:translateX(-50%)}
+.prob-scale{display:flex;justify-content:space-between;gap:6px;margin-top:6px;color:var(--muted-2);font-size:.63rem;font-variant-numeric:tabular-nums}
+.model-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:11px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted);font-size:.7rem}
+.model-error{margin:10px 0 0;color:var(--danger);font-size:.73rem;line-height:1.5;overflow-wrap:anywhere}
+.technical-card{margin-top:20px;padding:0;overflow:hidden}
+.technical-card details{width:100%}
+.technical-card summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;cursor:pointer;color:var(--ink-2);font-size:.85rem;font-weight:750;list-style:none}
+.technical-card summary::-webkit-details-marker{display:none}
+.technical-card summary>span:first-child{display:inline-flex;align-items:center;gap:8px}
+.technical-card summary .icon{width:16px;height:16px;color:var(--petrol-600)}
+.summary-hint{color:var(--muted-2);font-size:.72rem;font-weight:500}
+.technical-card details[open] summary{border-bottom:1px solid var(--line)}
+#technicalBody{padding:18px 22px 22px}
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px}
+.tech-item{padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);min-width:0}
+.tech-item span{display:block;color:var(--muted-2);font-size:.66rem;font-weight:750;letter-spacing:.05em;text-transform:uppercase}
+.tech-item strong{display:block;margin-top:2px;color:var(--ink-2);font-size:.8rem;font-weight:650;overflow-wrap:anywhere}
+.tech-models{display:grid;gap:9px;margin-top:14px}
+.tech-model{padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.tech-model-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.tech-model-head strong{color:var(--navy-900);font-size:.8rem}
+.tech-model-head span{color:var(--muted-2);font:600 .66rem var(--mono)}
+.tech-model dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 10px;margin:0;font-size:.7rem}
+.tech-model dt{color:var(--muted-2)}
+.tech-model dd{margin:0;color:var(--ink-2);overflow-wrap:anywhere}
+.segment-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.segment-chips span{padding:2px 6px;border:1px solid var(--line);border-radius:5px;background:var(--surface-2);color:var(--muted);font:600 .64rem var(--mono);font-variant-numeric:tabular-nums}
+.segment-chips span.hi{border-color:var(--danger-line);background:var(--danger-bg);color:var(--danger)}
+.json-details{margin-top:12px}
+.json-details summary{padding:8px 0;color:var(--muted);font-size:.73rem;font-weight:650;cursor:pointer}
+.json-details pre{max-height:320px;overflow:auto;margin:0;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--ink-2);font:500 .67rem/1.55 var(--mono)}
+.disclaimer{display:flex;align-items:flex-start;gap:10px;margin:20px 2px 0;padding:13px 15px;border:1px solid var(--warn-line);border-radius:12px;background:var(--warn-bg);color:#6f4a1a;font-size:.76rem;line-height:1.6}
+.disclaimer .icon{width:17px;height:17px;flex:0 0 auto;margin-top:1px;color:var(--warn)}
+.disclaimer strong{color:#5b3b12}
+.footer{max-width:1320px;width:100%;margin:0 auto;padding:0 28px 26px;display:flex;align-items:center;justify-content:space-between;gap:14px;color:var(--muted-2);font-size:.72rem}
+.footer p{margin:0}
+.toast{position:fixed;z-index:80;left:50%;bottom:24px;transform:translateX(-50%);max-width:min(520px,calc(100vw - 32px));padding:12px 15px;border:1px solid var(--danger-line);border-radius:11px;background:#fff;color:var(--danger);font-size:.8rem;line-height:1.5;box-shadow:var(--shadow-lg);animation:rise .2s ease both}
+.mono{font-family:var(--mono);font-size:.92em}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1080px){
+  .workspace{grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr)}
+  .hero-content{grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:28px}
+}
+@media(max-width:980px){
+  .hero-content{grid-template-columns:1fr;align-items:start}
+  .stepper{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .step{padding:10px}
+  .workspace{grid-template-columns:1fr}
+  .action-card{position:static}
+  .result-grid{grid-template-columns:1fr}
+  .steps-grid{grid-template-columns:1fr}
+  .page{padding:22px 20px 44px}
+  .topbar-inner{padding:12px 20px}
+  .footer{padding:0 20px 22px}
+}
+@media(max-width:720px){
+  .hero{border-radius:22px;padding:24px 20px}
+  .hero h1{font-size:clamp(1.75rem,8vw,2.35rem)}
+  .hero p{font-size:.92rem}
+  .stepper{grid-template-columns:1fr}
+  .step{padding:9px 11px}
+  .card{padding:18px;border-radius:16px}
+  .card-head{flex-direction:column;gap:10px}
+  .file-pill{max-width:100%}
+  .stage{height:250px}
+  .global-card{grid-template-columns:1fr;gap:18px}
+  .gauge-wrap{flex-direction:row;justify-content:flex-start;gap:14px;min-width:0}
+  .gauge{width:112px}
+  .gauge::before{width:88px}
+  .gauge-inner strong{font-size:1.08rem}
+  .global-main{gap:12px}
+  .result-icon{width:46px;height:46px;border-radius:13px}
+  .results-head{flex-direction:column;align-items:flex-start;gap:9px}
+  .plot-footer{flex-direction:column;align-items:flex-start;gap:4px}
+  .format-note{max-width:100%}
+  .summary-hint{display:none}
+  .footer{flex-direction:column;align-items:flex-start;gap:4px}
+}
+@media(max-width:520px){
+  .topbar-inner{padding:10px 14px;gap:10px}
+  .brand-mark{width:38px;height:38px;border-radius:11px}
+  .brand-text small{display:none}
+  .service-chip{padding:7px 10px;font-size:.72rem}
+  .service-chip #serviceText{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .page{padding:16px 12px 36px}
+  .hero{padding:22px 16px}
+  .card{padding:15px}
+  .stage{height:220px}
+  .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .model-grid{grid-template-columns:1fr}
+  .global-card{padding:16px}
+  .result-chips{gap:5px}
+  .chip{font-size:.68rem}
+  .gauge-wrap{flex-direction:column;align-items:flex-start}
+  .gauge{width:104px}
+  .gauge::before{width:82px}
+  .technical-card summary{padding:15px 16px}
+  #technicalBody{padding:15px 16px 18px}
+  .toast{bottom:14px}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+/* ---------- Animations ---------- */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.82)}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes indeterminate{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+</style>
+</head>
+<body>
+<svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.2-5.5L12.6 18l2.4-6H21"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4L19 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3.2 19.2h17.6z"/><path d="M12 9v4.5"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.3 2.7 7.8 7 9.5 4.3-1.7 7-5.2 7-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.4 5.6a5 5 0 0 0-7.1 0L12 6.9l-1.3-1.3a5 5 0 1 0-7.1 7.1L12 21l8.4-8.3a5 5 0 0 0 0-7.1z"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/><path d="M10.5 7.5v6"/><path d="M7.5 10.5h6"/></symbol>
+  <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/><path d="M7.5 10.5h6"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H4v4"/><path d="M16 3h4v4"/><path d="M8 21H4v-4"/><path d="M16 21h4v-4"/><path d="M4 4l5 5"/><path d="M20 4l-5 5"/><path d="M4 20l5-5"/><path d="M20 20l-5-5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 3.5v3"/><path d="M12 17.5v3"/><path d="M3.5 12h3"/><path d="M17.5 12h3"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 8 4.5-8 4.5-8-4.5z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4"/><path d="M12 17v4"/><path d="M3 12h4"/><path d="M17 12h4"/><path d="m5.6 5.6 2.8 2.8"/><path d="m15.6 15.6 2.8 2.8"/><path d="m18.4 5.6-2.8 2.8"/><path d="m8.4 15.6-2.8 2.8"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+</svg>
+
+<div class="app-shell">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#" aria-label="CardioAgent-Ops, accueil">
+        <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-pulse"></use></svg></span>
+        <span class="brand-text"><strong>CardioAgent<span>-Ops</span></strong><small>Analyse PCG assistée</small></span>
+      </a>
+      <div class="topbar-actions">
+        <button type="button" class="service-chip is-checking" id="serviceChip" title="Vérifier la connexion au service d'analyse">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="serviceText">Connexion au service…</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero" aria-labelledby="heroTitle">
+      <div class="hero-bg" aria-hidden="true">
+        <svg viewBox="0 0 1200 420" preserveAspectRatio="none">
+          <path d="M0 250h190l28-64 37 154 43-196 36 166 31-60h83l34-86 29 170 38-184 34 100h118l27-50 34 116 40-142 30 76h321" fill="none" stroke="#8fd3dc" stroke-width="2"/>
+          <path d="M0 300h240l34-40 28 92 39-118 28 72 42-36h150l26-48 31 98 35-112 31 66h486" fill="none" stroke="#ffffff" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="hero-content">
+        <div class="hero-copy">
+          <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-pulse"></use></svg>Phonocardiographie · Aide à l'analyse</span>
+          <h1>Un signal cardiaque.<br><em>Trois modèles. Une lecture claire.</em></h1>
+          <p>Importez un enregistrement WAV. Le SVM, l'arbre de décision et le CNN analysent le signal automatiquement. Vous obtenez un résultat consolidé, les probabilités de chaque modèle et des recommandations adaptées.</p>
+        </div>
+        <ol class="stepper" aria-label="Étapes de l'analyse">
+          <li class="step is-active" id="step1"><span class="step-num">1</span><span class="step-text"><strong>Importer</strong><small>Fichier WAV</small></span></li>
+          <li class="step" id="step2"><span class="step-num">2</span><span class="step-text"><strong>Vérifier</strong><small>Signal & caractéristiques</small></span></li>
+          <li class="step" id="step3"><span class="step-num">3</span><span class="step-text"><strong>Prédire</strong><small>Résultat & recommandations</small></span></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="workspace" aria-label="Import et analyse du signal">
+      <article class="card signal-card">
+        <header class="card-head">
+          <div>
+            <span class="section-kicker">Étape 1 · Visualisation</span>
+            <h2>Signal PCG</h2>
+            <p>Chargez un fichier WAV pour explorer la forme d'onde et ses caractéristiques.</p>
+          </div>
+          <div class="file-pill" id="filePill" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg>
+            <span id="fileName"></span>
+            <button type="button" class="pill-action" id="changeFile">Changer</button>
+          </div>
+        </header>
+
+        <div class="stage" id="stage">
+          <canvas id="wave" aria-label="Forme d'onde du signal PCG"></canvas>
+          <canvas id="overlay" aria-hidden="true"></canvas>
+          <label class="empty-state" id="empty" for="file">
+            <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-upload"></use></svg></span>
+            <strong>Déposez votre fichier WAV</strong>
+            <span>ou cliquez pour parcourir vos fichiers</span>
+            <small>WAV · 25 Mo maximum</small>
+          </label>
+          <div class="plot-tools" id="plotTools" hidden>
+            <button type="button" class="icon-btn" id="zoomIn" title="Zoom avant" aria-label="Zoom avant"><svg class="icon" aria-hidden="true"><use href="#i-zoom-in"></use></svg></button>
+            <button type="button" class="icon-btn" id="zoomOut" title="Zoom arrière" aria-label="Zoom arrière"><svg class="icon" aria-hidden="true"><use href="#i-zoom-out"></use></svg></button>
+            <button type="button" class="icon-btn" id="resetView" title="Recentrer la vue" aria-label="Recentrer la vue"><svg class="icon" aria-hidden="true"><use href="#i-expand"></use></svg></button>
+          </div>
+          <div class="readout" id="readout" hidden></div>
+        </div>
+        <input id="file" type="file" accept=".wav,audio/wav,audio/x-wav" hidden>
+        <div class="plot-footer">
+          <p class="plot-hint"><svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>Molette : zoom · Glisser : naviguer · Double-clic : réinitialiser</p>
+          <span class="format-note" id="formatNote">Aucun fichier chargé</span>
+        </div>
+        <p class="inline-error" id="fileError" role="alert" hidden></p>
+        <dl class="stat-grid" id="stats" hidden></dl>
+        <div class="feature-strip" id="featureStrip" hidden>
+          <div class="feature-strip-head"><svg class="icon" aria-hidden="true"><use href="#i-layers"></use></svg>Caractéristiques extraites par le service d'analyse</div>
+          <div class="feature-grid" id="featureGrid"></div>
+        </div>
+      </article>
+
+      <aside class="card action-card" aria-labelledby="actionTitle">
+        <header class="card-head compact">
+          <div>
+            <span class="section-kicker">Étape 2 · Prédiction</span>
+            <h2 id="actionTitle">Lancer l'analyse</h2>
+            <p>Les trois modèles sont exécutés automatiquement sur le serveur.</p>
+          </div>
+        </header>
+        <div class="action-body">
+          <div class="readiness" aria-label="État de préparation">
+            <div class="ready-item" id="readyFile"><span class="ready-icon"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg></span><span>Fichier WAV chargé</span></div>
+            <div class="ready-item" id="readyService"><span class="ready-icon"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg></span><span>Service d'analyse connecté</span></div>
+          </div>
+          <button type="button" class="btn-primary" id="predict" disabled>
+            <svg class="icon" aria-hidden="true"><use href="#i-pulse"></use></svg>
+            <span class="btn-label">Lancer la prédiction</span>
+            <span class="spinner" aria-hidden="true"></span>
+            <svg class="icon btn-arrow" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+          </button>
+          <p class="action-note" id="actionNote">Importez d'abord un fichier WAV pour activer l'analyse.</p>
+          <div class="model-strip" id="modelStrip" aria-label="Modèles exécutés">
+            <span class="model-chip"><span class="model-dot"></span>SVM</span>
+            <span class="model-chip"><span class="model-dot"></span>Arbre de décision</span>
+            <span class="model-chip"><span class="model-dot"></span>CNN</span>
+          </div>
+          <div class="loading-bar" id="loadingBar" hidden><span></span></div>
+          <div class="status-line" id="runStatus" role="status" aria-live="polite">
+            <svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>
+            <span id="runStatusText">Prêt à analyser un signal.</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="getting-started" id="gettingStarted" aria-labelledby="howTitle">
+      <div class="section-heading">
+        <div><span class="section-kicker">Parcours simplifié</span><h2 id="howTitle">Trois étapes, aucune configuration.</h2></div>
+      </div>
+      <div class="steps-grid">
+        <article class="step-card"><span class="step-badge">01</span><h3>Importez</h3><p>Déposez un fichier WAV ou parcourez vos fichiers. Le signal est affiché immédiatement, sans envoi préalable.</p></article>
+        <article class="step-card"><span class="step-badge">02</span><h3>Analyse croisée</h3><p>Un seul clic exécute le SVM, l'arbre de décision et le CNN. Aucun réglage technique n'est nécessaire.</p></article>
+        <article class="step-card"><span class="step-badge">03</span><h3>Résultat consolidé</h3><p>Consultez le consensus, les probabilités, les résultats individuels et les recommandations adaptées.</p></article>
+      </div>
+    </section>
+
+    <section class="results" id="results" hidden aria-labelledby="resultsTitle">
+      <header class="results-head">
+        <div>
+          <span class="section-kicker">Analyse terminée</span>
+          <h2 id="resultsTitle">Résultats de l'analyse</h2>
+          <p id="resultsSubtitle">Synthèse des trois modèles pour le signal chargé.</p>
+        </div>
+        <span class="result-time" id="resultTime"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span>—</span></span>
+      </header>
+
+      <article class="card global-card" id="globalCard">
+        <div class="global-main">
+          <div class="result-icon" id="globalIcon"><svg class="icon" aria-hidden="true"><use href="#i-heart"></use></svg></div>
+          <div class="global-copy">
+            <span class="section-kicker">Résultat global</span>
+            <h2 id="globalTitle">—</h2>
+            <p id="globalSummary">—</p>
+            <div class="result-chips" id="globalChips"></div>
+          </div>
+        </div>
+        <div class="gauge-wrap">
+          <div class="gauge" id="gauge" style="--value:0;--gauge-color:var(--petrol-600)">
+            <div class="gauge-inner"><strong id="gaugeValue">—</strong><span>P(anomalie) moyenne</span></div>
+          </div>
+          <p class="gauge-caption" id="gaugeCaption">Seuil moyen : —</p>
+        </div>
+      </article>
+
+      <div class="result-grid">
+        <article class="card consensus-card" aria-labelledby="consensusTitle">
+          <header class="card-head compact">
+            <div><span class="section-kicker">Consensus</span><h2 id="consensusTitle">Vote des modèles</h2></div>
+            <span class="consensus-badge" id="consensusBadge">—</span>
+          </header>
+          <div class="vote-bar" id="voteBar"></div>
+          <div class="vote-legend" id="voteLegend"></div>
+          <div class="vote-list" id="voteList"></div>
+          <div class="consensus-note" id="consensusNote"></div>
+        </article>
+
+        <article class="card recommendations-card" aria-labelledby="recommendationsTitle">
+          <header class="card-head compact">
+            <div><span class="section-kicker">Aide à la décision</span><h2 id="recommendationsTitle">Recommandations</h2></div>
+            <svg class="icon" aria-hidden="true" style="width:18px;height:18px;color:var(--petrol-600)"><use href="#i-spark"></use></svg>
+          </header>
+          <div id="recommendationMain"></div>
+          <ul class="recommendation-list" id="recommendationList"></ul>
+          <div class="quality-note" id="qualityNote"></div>
+        </article>
+      </div>
+
+      <article class="card models-card" aria-labelledby="modelsTitle">
+        <header class="card-head compact">
+          <div><span class="section-kicker">Détail par modèle</span><h2 id="modelsTitle">Résultats individuels</h2><p>Probabilité d'anomalie et seuil de décision de chaque modèle.</p></div>
+        </header>
+        <div class="model-grid" id="modelGrid"></div>
+      </article>
+
+      <article class="card technical-card">
+        <details id="technicalDetails">
+          <summary><span><svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>Détails techniques</span><span class="summary-hint">Données d'analyse et informations des modèles</span></summary>
+          <div id="technicalBody"></div>
+        </details>
+      </article>
+
+      <p class="disclaimer"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg><span><strong>Avertissement médical.</strong> Ces résultats sont produits par des modèles expérimentaux d'aide à l'analyse. Ils ne constituent pas un diagnostic médical et ne remplacent pas l'avis d'un professionnel de santé.</span></p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>CardioAgent-Ops · Analyse expérimentale de signaux phonocardiographiques.</p>
+    <p>Traitement côté services · Aucun modèle n'est exécuté dans le navigateur.</p>
+  </footer>
+</div>
+<div id="toast" class="toast" role="alert" hidden></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const MAX_BYTES = 25 * 1024 * 1024;
+const state = {
+  file: null, sig: null, sr: 0, ch: 0, bits: 0, peak: 0, rms: 0, zcr: 0,
+  view: [0, 1], ymax: 1, hover: null, drag: null,
+  service: null, serviceHealth: null, candidates: [], probePromise: null,
+  predicting: false, result: null, timer: null, startedAt: 0
+};
+
+function esc(value){
+  return String(value == null ? '' : value).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+function fmt(value, digits = 4){
+  return (typeof value === 'number' && isFinite(value)) ? value.toFixed(digits) : '—';
+}
+function pct(value, digits = 1){
+  return (typeof value === 'number' && isFinite(value)) ? (value * 100).toFixed(digits) + ' %' : '—';
+}
+function formatBytes(bytes){
+  if (!bytes && bytes !== 0) return '—';
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' Mo';
+}
+function formatDateTime(date){
+  try {
+    return new Intl.DateTimeFormat('fr-FR', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'}).format(date);
+  } catch (e) { return date.toLocaleString(); }
+}
+function plural(count, singular, pluralForm){
+  const n = Number(count) || 0;
+  return n === 1 ? '1 ' + singular : n + ' ' + (pluralForm || singular + 's');
+}
+function setText(id, text){ const el = $(id); if (el) el.textContent = text; }
+function setHidden(id, hidden){ const el = $(id); if (el) el.hidden = !!hidden; }
+
+function setStep(step){
+  [1, 2, 3].forEach(i => {
+    const el = $('step' + i);
+    if (!el) return;
+    el.classList.toggle('is-active', i === step);
+    el.classList.toggle('is-done', i < step);
+  });
+}
+const narrowScreen = window.matchMedia('(max-width: 520px)');
+let lastServiceChip = null;
+function setServiceChip(kind, text, shortText){
+  const chip = $('serviceChip');
+  chip.classList.remove('is-checking','is-ready','is-partial','is-down');
+  chip.classList.add('is-' + kind);
+  lastServiceChip = {kind, text, shortText};
+  setText('serviceText', narrowScreen.matches && shortText ? shortText : text);
+}
+narrowScreen.addEventListener('change', () => {
+  if (lastServiceChip) setServiceChip(lastServiceChip.kind, lastServiceChip.text, lastServiceChip.shortText);
+});
+function setReadyService(ready){
+  const el = $('readyService');
+  el.classList.toggle('is-ready', !!ready);
+  el.classList.toggle('is-down', !ready && !state.probing);
+}
+function setRunStatus(text, tone = 'info'){
+  const line = $('runStatus');
+  line.classList.remove('is-busy','is-error','is-success');
+  if (tone === 'busy') line.classList.add('is-busy');
+  if (tone === 'error') line.classList.add('is-error');
+  if (tone === 'success') line.classList.add('is-success');
+  const use = line.querySelector('use');
+  if (use) use.setAttribute('href', tone === 'error' ? '#i-alert' : tone === 'success' ? '#i-check' : tone === 'busy' ? '#i-clock' : '#i-info');
+  setText('runStatusText', text);
+}
+function showToast(message){
+  const toast = $('toast');
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => { toast.hidden = true; }, 5200);
+}
+function updateActionState(){
+  const ready = !!state.file;
+  $('readyFile').classList.toggle('is-ready', ready);
+  $('predict').disabled = !ready || state.predicting;
+  if (!ready) {
+    setText('actionNote', 'Importez d\u2019abord un fichier WAV pour activer l\u2019analyse.');
+  } else if (state.service) {
+    setText('actionNote', 'Les trois modèles seront exécutés automatiquement sur le serveur.');
+  } else {
+    setText('actionNote', 'Le service sera reconnecté automatiquement au lancement de l\u2019analyse.');
+  }
+}
+function setPredictingUI(on){
+  state.predicting = on;
+  const btn = $('predict');
+  btn.classList.toggle('is-loading', on);
+  btn.disabled = on || !state.file;
+  $('loadingBar').hidden = !on;
+  $('modelStrip').classList.toggle('is-running', on);
+  if (on) {
+    state.startedAt = Date.now();
+    setRunStatus('Analyse en cours — SVM, arbre de décision et CNN…', 'busy');
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      const seconds = Math.max(0, Math.round((Date.now() - state.startedAt) / 1000));
+      setRunStatus(`Analyse en cours · ${seconds} s — SVM, arbre de décision et CNN…`, 'busy');
+    }, 1000);
+  } else {
+    clearInterval(state.timer);
+    state.timer = null;
+    $('modelStrip').classList.remove('is-running');
+  }
+}
+function resetResults(){
+  state.result = null;
+  setHidden('results', true);
+  setHidden('gettingStarted', false);
+  setHidden('featureStrip', true);
+  $('globalCard').classList.remove('is-danger','is-success','is-neutral');
+  $('technicalDetails').open = false;
+}
+function clearFileError(){
+  const el = $('fileError');
+  el.hidden = true;
+  el.textContent = '';
+}
+function showFileError(message){
+  const el = $('fileError');
+  el.textContent = message;
+  el.hidden = false;
+}
+
+/* ---------- Découverte automatique des services ---------- */
+function buildCandidates(){
+  const list = [];
+  const add = (id, label, base, predictPaths, healthPath, kind) => {
+    const clean = base.replace(/\/+$/, '');
+    if (!clean || list.some(c => c.base === clean)) return;
+    list.push({id, label, base: clean, predictPaths, health: healthPath, kind});
+  };
+  add('gateway-local', 'API Gateway', 'http://localhost:8085', ['/analyze_all'], '/health', 'gateway');
+  add('gateway-ip', 'API Gateway', 'http://127.0.0.1:8085', ['/analyze_all'], '/health', 'gateway');
+  add('audio-local', 'Audio Engine', 'http://localhost:8001', ['/predict_all'], '/health', 'audio');
+  add('audio-ip', 'Audio Engine', 'http://127.0.0.1:8001', ['/predict_all'], '/health', 'audio');
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    add('same-origin', 'Service local', location.origin, ['/analyze_all', '/predict_all'], '/health', 'auto');
+  }
+  return list;
+}
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12000){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {...options, signal: controller.signal});
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function readResponse(response){
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try { return await response.json(); } catch (e) { return null; }
+  }
+  const text = await response.text();
+  try { return JSON.parse(text); } catch (e) { return text; }
+}
+function errorDetail(body, fallback){
+  if (body && typeof body === 'object') return body.detail || body.error || body.message || fallback;
+  return body || fallback;
+}
+function extractModelStatus(candidate, body){
+  if (!body || typeof body !== 'object') return null;
+  let models = body.models_tp3;
+  if (!models && body.services) {
+    const audio = body.services['audio-engine'] || body.services.audio_engine;
+    if (audio && audio.body && audio.body.models_tp3) models = audio.body.models_tp3;
+  }
+  if (!models || typeof models !== 'object') return null;
+  const values = Object.values(models);
+  return {available: values.filter(Boolean).length, total: values.length};
+}
+function isHealthy(candidate, body){
+  if (!body || typeof body !== 'object') return false;
+  if (candidate.kind === 'audio') return body.status === 'ok';
+  if (candidate.kind === 'gateway') {
+    const services = body.services || {};
+    const audio = services['audio-engine'] || services.audio_engine;
+    return !!audio && (audio.status === 'ok' || (typeof audio.http === 'number' && audio.http < 500));
+  }
+  if (body.models_tp3) return body.status === 'ok';
+  if (body.services) {
+    const audio = body.services['audio-engine'] || body.services.audio_engine;
+    return !!audio && (audio.status === 'ok' || (typeof audio.http === 'number' && audio.http < 500));
+  }
+  return body.status === 'ok';
+}
+async function probeServices(){
+  if (state.probePromise) return state.probePromise;
+  state.probing = true;
+  $('readyService').classList.remove('is-ready','is-down');
+  setServiceChip('checking', 'Connexion au service…', 'Connexion…');
+  state.probePromise = (async () => {
+    const candidates = buildCandidates();
+    state.candidates = candidates;
+    let chosen = null;
+    const choose = result => {
+      if (chosen) return;
+      chosen = result;
+      state.service = result.candidate;
+      state.serviceHealth = result;
+      const models = result.models;
+      const label = models && models.total
+        ? `Service prêt · ${models.available}/${models.total} modèles`
+        : 'Service connecté';
+      const shortLabel = models && models.total
+        ? `${models.available}/${models.total} modèles`
+        : 'Connecté';
+      setServiceChip(models && models.total && models.available < models.total ? 'partial' : 'ready', label, shortLabel);
+      $('serviceChip').title = result.candidate.label + ' — cliquer pour vérifier à nouveau';
+      $('readyService').classList.add('is-ready');
+      $('readyService').classList.remove('is-down');
+      updateActionState();
+    };
+    await Promise.all(candidates.map(async candidate => {
+      try {
+        const response = await fetchWithTimeout(candidate.base + candidate.health, {method:'GET', cache:'no-store'}, 3500);
+        const body = await readResponse(response);
+        if (!response.ok) return;
+        const result = {candidate, ok:isHealthy(candidate, body), body, models:extractModelStatus(candidate, body)};
+        if (result.ok) choose(result);
+      } catch (error) {
+        /* service candidat indisponible : les autres candidats restent testés */
+      }
+    }));
+    if (!chosen) {
+      state.service = null;
+      state.serviceHealth = null;
+      setServiceChip('down', 'Service indisponible', 'Indisponible');
+      $('serviceChip').title = 'Service indisponible — cliquer pour réessayer';
+      $('readyService').classList.remove('is-ready');
+      $('readyService').classList.add('is-down');
+    }
+    state.probing = false;
+    updateActionState();
+    return state.service;
+  })().finally(() => {
+    state.probePromise = null;
+    state.probing = false;
+  });
+  return state.probePromise;
+}
+
+/* ---------- Lecture WAV et caractéristiques ---------- */
+function parseWav(buffer){
+  const view = new DataView(buffer);
+  const tag = offset => String.fromCharCode(
+    view.getUint8(offset), view.getUint8(offset + 1),
+    view.getUint8(offset + 2), view.getUint8(offset + 3)
+  );
+  if (buffer.byteLength < 44 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') {
+    throw new Error('Ce fichier n\u2019est pas un WAV valide.');
+  }
+  let offset = 12, fmtMeta = null, data = null;
+  while (offset + 8 <= buffer.byteLength) {
+    const id = tag(offset);
+    const size = view.getUint32(offset + 4, true);
+    const start = offset + 8;
+    if (id === 'fmt ') {
+      fmtMeta = {
+        tag: view.getUint16(start, true), ch: view.getUint16(start + 2, true),
+        sr: view.getUint32(start + 4, true), bits: view.getUint16(start + 14, true)
+      };
+      if (fmtMeta.tag === 0xFFFE && size >= 26) fmtMeta.tag = view.getUint16(start + 24, true);
+    } else if (id === 'data') {
+      data = {start, size: Math.min(size, buffer.byteLength - start)};
+      break;
+    }
+    offset = start + size + (size & 1);
+  }
+  if (!fmtMeta || !data) throw new Error('WAV incomplet (blocs fmt/data manquants).');
+  if (fmtMeta.tag !== 1 && fmtMeta.tag !== 3) throw new Error('WAV compressé non pris en charge (PCM ou float attendu).');
+  const bytesPerSample = fmtMeta.bits / 8;
+  const count = Math.floor(data.size / (bytesPerSample * fmtMeta.ch));
+  if (!count) throw new Error('Aucun échantillon exploitable dans ce fichier.');
+  const samples = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    let sum = 0;
+    for (let c = 0; c < fmtMeta.ch; c++) {
+      const p = data.start + (i * fmtMeta.ch + c) * bytesPerSample;
+      let value;
+      if (fmtMeta.tag === 3) value = fmtMeta.bits === 64 ? view.getFloat64(p, true) : view.getFloat32(p, true);
+      else if (fmtMeta.bits === 16) value = view.getInt16(p, true) / 32768;
+      else if (fmtMeta.bits === 8) value = (view.getUint8(p) - 128) / 128;
+      else if (fmtMeta.bits === 24) value = (view.getUint8(p) | (view.getUint8(p + 1) << 8) | (view.getInt8(p + 2) << 16)) / 8388608;
+      else if (fmtMeta.bits === 32) value = view.getInt32(p, true) / 2147483648;
+      else throw new Error('Résolution ' + fmtMeta.bits + ' bits non prise en charge.');
+      sum += value;
+    }
+    samples[i] = sum / fmtMeta.ch;
+  }
+  return {sig: samples, sr: fmtMeta.sr, ch: fmtMeta.ch, bits: fmtMeta.bits};
+}
+function computeSignalStats(samples){
+  let peak = 0, sumSquares = 0, crossings = 0, previous = samples[0] || 0;
+  for (let i = 0; i < samples.length; i++) {
+    const value = samples[i];
+    const absolute = Math.abs(value);
+    if (absolute > peak) peak = absolute;
+    sumSquares += value * value;
+    if (i > 0 && ((previous < 0 && value >= 0) || (previous >= 0 && value < 0))) crossings++;
+    previous = value;
+  }
+  return {
+    peak,
+    rms: Math.sqrt(sumSquares / Math.max(1, samples.length)),
+    zcr: crossings / Math.max(1, samples.length - 1)
+  };
+}
+function renderStats(meta){
+  const items = [
+    ['Durée', meta.duration.toFixed(3) + ' s'],
+    ['Fréquence', meta.sr.toLocaleString('fr-FR') + ' Hz'],
+    ['Canaux', String(meta.ch)],
+    ['Résolution', meta.bits + ' bits'],
+    ['Amplitude crête', fmt(meta.peak, 4)],
+    ['RMS', fmt(meta.rms, 4)],
+    ['ZCR (fichier)', pct(meta.zcr, 2)],
+    ['Taille', formatBytes(meta.bytes)]
+  ];
+  $('stats').innerHTML = items.map(([label, value]) =>
+    `<div class="stat"><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`
+  ).join('');
+  $('stats').hidden = false;
+}
+async function loadFile(file){
+  if (!file) return;
+  clearFileError();
+  if (!/\.wav$/i.test(file.name)) {
+    showFileError('Format non pris en charge. Sélectionnez un fichier .wav.');
+    return;
+  }
+  if (file.size > MAX_BYTES) {
+    showFileError('Fichier trop volumineux (' + formatBytes(file.size) + '). La limite est de 25 Mo.');
+    return;
+  }
+  try {
+    const parsed = parseWav(await file.arrayBuffer());
+    if (!parsed.sig.length) throw new Error('Aucun échantillon exploitable.');
+    if (parsed.sr <= 0) throw new Error('Fréquence d\u2019échantillonnage invalide.');
+    const stats = computeSignalStats(parsed.sig);
+    if (stats.peak < 1e-6) throw new Error('Le signal est silencieux.');
+    state.file = file;
+    state.sig = parsed.sig;
+    state.sr = parsed.sr;
+    state.ch = parsed.ch;
+    state.bits = parsed.bits;
+    state.peak = stats.peak;
+    state.rms = stats.rms;
+    state.zcr = stats.zcr;
+    state.view = [0, parsed.sig.length / parsed.sr];
+    state.ymax = Math.max(stats.peak * 1.08, 1e-6);
+    state.hover = null;
+    state.drag = null;
+
+    $('fileName').textContent = file.name;
+    $('filePill').hidden = false;
+    $('formatNote').textContent = parsed.sr + ' Hz · ' + parsed.ch + (parsed.ch > 1 ? ' canaux' : ' canal') + ' · ' + parsed.bits + ' bits · ' + formatBytes(file.size);
+    $('empty').hidden = true;
+    $('stage').classList.add('has-signal');
+    $('plotTools').hidden = false;
+    setHidden('readout', true);
+    renderStats({...stats, sr: parsed.sr, ch: parsed.ch, bits: parsed.bits, bytes: file.size, duration: parsed.sig.length / parsed.sr});
+    resetResults();
+    setStep(2);
+    updateActionState();
+    setRunStatus('Fichier chargé · prêt pour l\u2019analyse.', 'info');
+    drawBase();
+    drawOverlay();
+    $('file').value = '';
+    if (!state.service) probeServices();
+    $('predict').focus({preventScroll:true});
+  } catch (error) {
+    showFileError(error.message || 'Impossible de lire ce fichier WAV.');
+  }
+}
+
+/* ---------- Événements de fichier ---------- */
+$('file').addEventListener('change', event => loadFile(event.target.files[0]));
+$('changeFile').addEventListener('click', event => {
+  event.preventDefault();
+  clearFileError();
+  $('file').click();
+});
+$('serviceChip').addEventListener('click', () => probeServices());
+const stage = $('stage');
+['dragenter','dragover'].forEach(type => stage.addEventListener(type, event => {
+  event.preventDefault();
+  stage.classList.add('drag');
+}));
+['dragleave','drop'].forEach(type => stage.addEventListener(type, event => {
+  event.preventDefault();
+  stage.classList.remove('drag');
+}));
+stage.addEventListener('drop', event => loadFile(event.dataTransfer.files[0]));
+
+/* ---------- Tracé interactif du signal ---------- */
+const PLOT = {left: 52, right: 14, top: 18, bottom: 30};
+function cssVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function sizeCanvas(canvas){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = canvas.clientWidth || 0;
+  const height = canvas.clientHeight || 0;
+  if (!width || !height) return null;
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+  const context = canvas.getContext('2d');
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return {context, width, height};
+}
+function plotLayout(width, height){
+  const pw = Math.max(10, width - PLOT.left - PLOT.right);
+  const ph = Math.max(10, height - PLOT.top - PLOT.bottom);
+  return {L:PLOT.left, R:PLOT.right, T:PLOT.top, B:PLOT.bottom, pw, ph};
+}
+function niceStep(raw){
+  const power = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-12))));
+  const mantissa = raw / power;
+  return (mantissa < 1.5 ? 1 : mantissa < 3.5 ? 2 : mantissa < 7.5 ? 5 : 10) * power;
+}
+function drawBase(){
+  const sized = sizeCanvas($('wave'));
+  if (!sized) return;
+  sizeCanvas($('overlay'));
+  const {context:g, width:W, height:H} = sized;
+  g.clearRect(0, 0, W, H);
+  const {L, T, pw, ph} = plotLayout(W, H);
+  const colors = {
+    minor: 'rgba(10,33,53,.055)', major: 'rgba(10,33,53,.12)',
+    axis: cssVar('--muted-2') || '#8295a0', ink: cssVar('--navy-900') || '#0a2135',
+    envelope: 'rgba(17,114,132,.11)', envelopeLine: 'rgba(17,114,132,.28)'
+  };
+  const hasSignal = !!state.sig && state.sig.length > 0;
+  const [t0, t1] = hasSignal ? state.view : [0, 1];
+  const span = Math.max(1e-9, t1 - t0);
+  const X = t => L + (t - t0) / span * pw;
+  const Y = a => T + ph / 2 - (a / Math.max(state.ymax, 1e-9)) * (ph / 2);
+  const X_MINOR = niceStep(span / Math.max(3, pw / 95));
+  const X_MAJOR = X_MINOR * 5;
+
+  g.lineWidth = 1;
+  g.font = '11px Inter, "Segoe UI", system-ui, sans-serif';
+  g.textBaseline = 'middle';
+
+  g.strokeStyle = colors.minor;
+  for (let t = Math.ceil(t0 / X_MINOR) * X_MINOR; t <= t1; t += X_MINOR) {
+    const x = X(t);
+    g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke();
+  }
+  for (let k = 0; k <= 10; k++) {
+    const y = T + ph * k / 10;
+    g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke();
+  }
+
+  g.strokeStyle = colors.major;
+  for (let t = Math.ceil(t0 / X_MAJOR) * X_MAJOR; t <= t1 + 1e-9; t += X_MAJOR) {
+    const x = X(t);
+    g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke();
+  }
+  for (let k = -2; k <= 2; k++) {
+    const y = Y(k * state.ymax / 2);
+    g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke();
+  }
+
+  g.fillStyle = colors.axis;
+  g.textAlign = 'center';
+  for (let t = Math.ceil(t0 / X_MAJOR) * X_MAJOR; t <= t1 + 1e-9; t += X_MAJOR) {
+    g.fillText(t.toFixed(3) + ' s', X(t), H - 10);
+  }
+  g.textAlign = 'right';
+  for (let k = -2; k <= 2; k++) {
+    const value = k * state.ymax / 2;
+    g.fillText(value.toFixed(2), L - 7, Y(value));
+  }
+
+  g.strokeStyle = 'rgba(10,33,53,.18)';
+  g.beginPath(); g.moveTo(L, Y(0)); g.lineTo(L + pw, Y(0)); g.stroke();
+
+  if (!hasSignal) return;
+
+  const sig = state.sig;
+  const sr = state.sr;
+  const i0 = Math.max(0, Math.floor(t0 * sr));
+  const i1 = Math.min(sig.length, Math.ceil(t1 * sr));
+  const samplesPerPixel = (i1 - i0) / pw;
+
+  g.save();
+  g.beginPath(); g.rect(L, T, pw, ph); g.clip();
+
+  if (samplesPerPixel > 2) {
+    const minValues = new Float32Array(pw);
+    const maxValues = new Float32Array(pw);
+    const envelope = new Float32Array(pw);
+    for (let px = 0; px < pw; px++) {
+      const start = i0 + Math.floor(px * samplesPerPixel);
+      const end = Math.min(i1, Math.floor((px + 1) * samplesPerPixel) + 1);
+      let low = Infinity, high = -Infinity, sum = 0, count = 0;
+      for (let i = start; i < end; i++) {
+        const value = sig[i];
+        if (value < low) low = value;
+        if (value > high) high = value;
+        sum += value * value;
+        count++;
+      }
+      minValues[px] = low === Infinity ? 0 : low;
+      maxValues[px] = high === -Infinity ? 0 : high;
+      envelope[px] = count ? Math.sqrt(sum / count) : 0;
+    }
+
+    g.beginPath();
+    for (let px = 0; px < pw; px++) {
+      const x = L + px;
+      const e = Math.min(state.ymax, envelope[px] * 1.8);
+      if (px === 0) g.moveTo(x, Y(e)); else g.lineTo(x, Y(e));
+    }
+    for (let px = pw - 1; px >= 0; px--) {
+      const x = L + px;
+      const e = Math.min(state.ymax, envelope[px] * 1.8);
+      g.lineTo(x, Y(-e));
+    }
+    g.closePath();
+    g.fillStyle = colors.envelope;
+    g.fill();
+    g.strokeStyle = colors.envelopeLine;
+    g.lineWidth = 0.8;
+    g.stroke();
+
+    g.beginPath();
+    let started = false;
+    for (let px = 0; px < pw; px++) {
+      const x = L + px;
+      const high = maxValues[px], low = minValues[px];
+      if (!started) { g.moveTo(x, Y(high)); started = true; }
+      else g.lineTo(x, Y(high));
+      g.lineTo(x, Y(low));
+    }
+    g.strokeStyle = colors.ink;
+    g.lineWidth = 1.15;
+    g.stroke();
+  } else {
+    g.beginPath();
+    let started = false;
+    for (let i = i0; i < i1; i++) {
+      const x = L + ((i / sr) - t0) / span * pw;
+      const y = Y(sig[i]);
+      if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+    }
+    g.strokeStyle = colors.ink;
+    g.lineWidth = 1.1;
+    g.stroke();
+  }
+  g.restore();
+}
+function drawOverlay(){
+  const sized = sizeCanvas($('overlay'));
+  if (!sized) return;
+  const {context:g, width:W, height:H} = sized;
+  g.clearRect(0, 0, W, H);
+  const readout = $('readout');
+  if (!state.hover || !state.sig) {
+    readout.hidden = true;
+    return;
+  }
+  const {L, T, pw, ph} = plotLayout(W, H);
+  const hover = state.hover;
+  if (hover.x < L || hover.x > L + pw || hover.y < T || hover.y > T + ph) {
+    readout.hidden = true;
+    return;
+  }
+  const y = T + ph / 2 - (hover.a / Math.max(state.ymax, 1e-9)) * (ph / 2);
+  g.save();
+  g.setLineDash([4, 4]);
+  g.strokeStyle = 'rgba(17,114,132,.55)';
+  g.lineWidth = 1;
+  g.beginPath(); g.moveTo(hover.x, T); g.lineTo(hover.x, T + ph); g.stroke();
+  g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke();
+  g.restore();
+  g.beginPath();
+  g.arc(hover.x, y, 3.2, 0, Math.PI * 2);
+  g.fillStyle = cssVar('--petrol-700') || '#0e5c6c';
+  g.fill();
+  readout.textContent = `t ${hover.t.toFixed(3)} s · A ${hover.a.toFixed(3)}`;
+  readout.hidden = false;
+  const left = Math.min(Math.max(hover.x + 12, 8), Math.max(8, W - 146));
+  const top = Math.min(Math.max(hover.y - 36, 8), Math.max(8, H - 36));
+  readout.style.left = left + 'px';
+  readout.style.top = top + 'px';
+}
+function clampViewStart(start, span, total){
+  return Math.min(Math.max(0, start), Math.max(0, total - span));
+}
+function zoomView(factor){
+  if (!state.sig) return;
+  const total = state.sig.length / state.sr;
+  const [t0, t1] = state.view;
+  const span = t1 - t0;
+  const center = (t0 + t1) / 2;
+  const nextSpan = Math.min(total, Math.max(total * 0.02, span * factor));
+  const nextStart = clampViewStart(center - nextSpan / 2, nextSpan, total);
+  state.view = [nextStart, Math.min(total, nextStart + nextSpan)];
+  state.hover = null;
+  drawBase(); drawOverlay();
+}
+function resetView(){
+  if (!state.sig) return;
+  const total = state.sig.length / state.sr;
+  state.view = [0, total];
+  state.hover = null;
+  drawBase(); drawOverlay();
+}
+stage.addEventListener('wheel', event => {
+  if (!state.sig) return;
+  event.preventDefault();
+  const rect = $('wave').getBoundingClientRect();
+  const {L, pw} = plotLayout(rect.width, rect.height);
+  const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left - L) / Math.max(1, pw)));
+  const total = state.sig.length / state.sr;
+  const [t0, t1] = state.view;
+  const span = t1 - t0;
+  const cursorTime = t0 + fraction * span;
+  const factor = event.deltaY < 0 ? 0.78 : 1.28;
+  const nextSpan = Math.min(total, Math.max(total * 0.02, span * factor));
+  const nextStart = clampViewStart(cursorTime - fraction * nextSpan, nextSpan, total);
+  state.view = [nextStart, Math.min(total, nextStart + nextSpan)];
+  state.hover = null;
+  drawBase(); drawOverlay();
+}, {passive:false});
+stage.addEventListener('pointerdown', event => {
+  if (!state.sig || event.target.closest('.plot-tools')) return;
+  state.drag = {x:event.clientX, view:[...state.view], moved:false};
+  stage.setPointerCapture(event.pointerId);
+});
+stage.addEventListener('pointermove', event => {
+  if (!state.sig) return;
+  const rect = $('wave').getBoundingClientRect();
+  if (state.drag) {
+    const dx = event.clientX - state.drag.x;
+    if (Math.abs(dx) > 2) state.drag.moved = true;
+    const total = state.sig.length / state.sr;
+    const span = state.drag.view[1] - state.drag.view[0];
+    const delta = -(dx / Math.max(1, rect.width - PLOT.left - PLOT.right)) * span;
+    const nextStart = clampViewStart(state.drag.view[0] + delta, span, total);
+    state.view = [nextStart, nextStart + span];
+    state.hover = null;
+    drawBase(); drawOverlay();
+    return;
+  }
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const {L, T, pw, ph} = plotLayout(rect.width, rect.height);
+  if (x < L || x > L + pw || y < T || y > T + ph) {
+    state.hover = null; drawOverlay(); return;
+  }
+  const [t0, t1] = state.view;
+  const span = t1 - t0;
+  const time = Math.min(t1, Math.max(t0, t0 + (x - L) / pw * span));
+  const index = Math.min(state.sig.length - 1, Math.max(0, Math.round(time * state.sr)));
+  state.hover = {x, y, t:time, a:state.sig[index] || 0};
+  drawOverlay();
+});
+stage.addEventListener('pointerup', event => {
+  state.drag = null;
+  try { stage.releasePointerCapture(event.pointerId); } catch (e) {}
+});
+stage.addEventListener('pointercancel', () => { state.drag = null; });
+stage.addEventListener('pointerleave', () => {
+  if (state.drag) return;
+  state.hover = null; drawOverlay();
+});
+stage.addEventListener('dblclick', () => { if (state.sig) resetView(); });
+$('zoomIn').addEventListener('click', () => zoomView(0.7));
+$('zoomOut').addEventListener('click', () => zoomView(1.43));
+$('resetView').addEventListener('click', resetView);
+if ('ResizeObserver' in window) {
+  new ResizeObserver(() => { drawBase(); drawOverlay(); }).observe(stage);
+} else {
+  window.addEventListener('resize', () => { drawBase(); drawOverlay(); });
+}
+
+/* ---------- Prédiction via les API existantes ---------- */
+class UserError extends Error {}
+function detailText(detail){
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(item => item && item.msg ? item.msg : JSON.stringify(item)).join(' · ');
+  if (detail && typeof detail === 'object') return detail.message || JSON.stringify(detail);
+  return String(detail || '');
+}
+function friendlyError(error){
+  const message = (error && error.message) || 'Analyse impossible.';
+  const first = message.split('\n')[0];
+  if (/Failed to fetch|NetworkError|Load failed|injoignable/i.test(first)) {
+    return 'Le service d\u2019analyse est injoignable. Vérifiez qu\u2019il est démarré, puis réessayez.';
+  }
+  if (/délai dépassé/i.test(first)) {
+    return 'Le service d\u2019analyse met trop de temps à répondre. Réessayez dans un instant.';
+  }
+  return first.length > 260 ? first.slice(0, 257) + '…' : first;
+}
+function orderedCandidates(){
+  const all = state.candidates.length ? state.candidates : buildCandidates();
+  if (state.service) return [state.service, ...all.filter(c => c.base !== state.service.base)];
+  return all;
+}
+async function requestPrediction(file){
+  const errors = [];
+  for (const candidate of orderedCandidates()) {
+    for (const path of candidate.predictPaths) {
+      const url = candidate.base + path;
+      try {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        const response = await fetchWithTimeout(url, {method:'POST', body:form}, 300000);
+        const body = await readResponse(response);
+        if (!response.ok) {
+          const detail = detailText(errorDetail(body, 'HTTP ' + response.status));
+          const clientError = response.status >= 400 && response.status < 500 && response.status !== 404 && response.status !== 405;
+          if (clientError) throw new UserError(detail || ('Erreur HTTP ' + response.status));
+          errors.push(`${candidate.label} (${path}) : HTTP ${response.status} — ${detail}`);
+          continue;
+        }
+        if (body && Array.isArray(body.analysis)) {
+          state.service = candidate;
+          state.serviceHealth = {candidate};
+          const okCount = body.consensus ? Number(body.consensus.models_ok || 0) : body.analysis.filter(row => row.status === 'ok').length;
+          const totalCount = body.consensus ? Number(body.consensus.models_total || body.analysis.length) : body.analysis.length;
+          setServiceChip(okCount < totalCount ? 'partial' : 'ready', `Service prêt · ${okCount}/${totalCount} modèles`, `${okCount}/${totalCount} modèles`);
+          $('readyService').classList.add('is-ready');
+          $('readyService').classList.remove('is-down');
+          return {data:body, candidate};
+        }
+        errors.push(`${candidate.label} (${path}) : réponse inattendue`);
+      } catch (error) {
+        if (error instanceof UserError) throw error;
+        const message = error.name === 'AbortError' ? 'délai dépassé (5 min)' : error.message;
+        errors.push(`${candidate.label} (${path}) : ${message}`);
+      }
+    }
+  }
+  throw new Error(errors.length ? errors.join('\n') : 'Aucun service d\u2019analyse n\u2019a répondu.');
+}
+async function runPrediction(){
+  if (!state.file || state.predicting) return;
+  const file = state.file;
+  clearFileError();
+  setPredictingUI(true);
+  try {
+    if (!state.service) await probeServices();
+    const result = await requestPrediction(file);
+    renderResults(result.data);
+    setPredictingUI(false);
+    setRunStatus('Analyse terminée. Le résultat consolidé est disponible ci-dessous.', 'success');
+    const results = $('results');
+    if (results.getBoundingClientRect().top > window.innerHeight * 0.55) {
+      results.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  } catch (error) {
+    console.error(error);
+    setPredictingUI(false);
+    setRunStatus(friendlyError(error), 'error');
+    showToast('L\u2019analyse n\u2019a pas pu aboutir. Vérifiez le service puis réessayez.');
+  }
+}
+$('predict').addEventListener('click', runPrediction);
+
+/* ---------- Rendu des résultats ---------- */
+function modelAvatar(key, family, label){
+  const value = String(key || family || label || '').toLowerCase();
+  if (value.includes('svm')) return 'SVM';
+  if (value.includes('tree') || value.includes('arbre')) return 'DT';
+  if (value.includes('cnn')) return 'CNN';
+  return 'ML';
+}
+function predictionLabel(prediction, short = false){
+  if (prediction === 'abnormal') return short ? 'Anomalie' : 'Anomalie détectée';
+  if (prediction === 'normal') return short ? 'Normal' : 'Signal normal';
+  return 'Indéterminé';
+}
+function agreementInfo(consensus){
+  const votes = (consensus && consensus.votes) || {};
+  const normal = Number(votes.normal || 0);
+  const abnormal = Number(votes.abnormal || 0);
+  const total = Number(consensus && consensus.models_ok) || (normal + abnormal);
+  if (!total) return {label:'Indisponible', tone:'info', detail:'Aucun vote exploitable.'};
+  if (normal === abnormal) {
+    return {label:'Modèles partagés', tone:'warning', detail:'Égalité : la décision du service est arbitrée par la probabilité moyenne.'};
+  }
+  const max = Math.max(normal, abnormal);
+  if (max === total) return {label:'Consensus unanime', tone:'success', detail:`Les ${total} modèles convergent.`};
+  return {label:'Consensus majoritaire', tone:'info', detail:`${max} modèles sur ${total} convergent.`};
+}
+function renderFeatureStrip(data){
+  const summary = data.feature_summary || {};
+  const items = [];
+  if (typeof summary.zcr_mean === 'number') items.push(['ZCR moyen', pct(summary.zcr_mean, 2)]);
+  if (typeof summary.spectral_centroid_hz === 'number') items.push(['Centroïde spectral', fmt(summary.spectral_centroid_hz, 1) + ' Hz']);
+  if (typeof summary.rms_mean === 'number') items.push(['RMS moyen', fmt(summary.rms_mean, 4)]);
+  if (typeof data.n_segments === 'number') items.push(['Segments analysés', String(data.n_segments)]);
+  if (!items.length) { $('featureStrip').hidden = true; return; }
+  $('featureGrid').innerHTML = items.map(([label, value]) =>
+    `<div class="feature"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
+  ).join('');
+  $('featureStrip').hidden = false;
+}
+function renderGlobal(data){
+  const consensus = data.consensus;
+  const analysis = data.analysis || [];
+  const ok = analysis.filter(row => row.status === 'ok');
+  const card = $('globalCard');
+  card.classList.remove('is-danger','is-success','is-neutral');
+  const iconUse = $('globalIcon').querySelector('use');
+  const gauge = $('gauge');
+
+  if (!consensus) {
+    card.classList.add('is-neutral');
+    if (iconUse) iconUse.setAttribute('href', '#i-info');
+    setText('globalTitle', 'Analyse incomplète');
+    setText('globalSummary', 'Le consensus n\u2019a pas pu être établi. Vérifiez que le service est disponible et que le fichier est valide, puis relancez l\u2019analyse.');
+    const total = analysis.length;
+    $('globalChips').innerHTML = `<span class="chip is-warning"><svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>${ok.length}/${total} ${total > 1 ? 'modèles exécutés' : 'modèle exécuté'}</span>`;
+    gauge.style.setProperty('--value', '0');
+    gauge.style.setProperty('--gauge-color', 'var(--muted-2)');
+    setText('gaugeValue', '—');
+    setText('gaugeCaption', 'Seuil moyen : —');
+    return;
+  }
+
+  const abnormal = consensus.prediction === 'abnormal';
+  const agreement = agreementInfo(consensus);
+  card.classList.add(abnormal ? 'is-danger' : 'is-success');
+  if (iconUse) iconUse.setAttribute('href', abnormal ? '#i-alert' : '#i-check');
+  const votes = consensus.votes || {};
+  const modelsOk = Number(consensus.models_ok || 0);
+  const modelsTotal = Number(consensus.models_total || analysis.length || 0);
+  const voteCount = Number(abnormal ? (votes.abnormal || 0) : (votes.normal || 0));
+  setText('globalTitle', abnormal ? 'Anomalie détectée' : 'Signal normal');
+  const voteText = `${plural(voteCount, 'modèle')} sur ${modelsOk} ${voteCount > 1 ? 'classent' : 'classe'} le signal comme ${abnormal ? 'anormal' : 'normal'}.`;
+  setText('globalSummary', `${voteText} Probabilité moyenne d\u2019anomalie : ${pct(consensus.mean_prob_abnormal, 1)} (seuil moyen ${pct(consensus.mean_threshold, 1)}).`);
+
+  const chips = [
+    `<span class="chip is-${agreement.tone}"><svg class="icon" aria-hidden="true"><use href="#${agreement.tone === 'danger' ? 'i-alert' : agreement.tone === 'success' ? 'i-check' : 'i-info'}"></use></svg>${esc(agreement.label)}</span>`,
+    `<span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-layers"></use></svg>${modelsOk}/${modelsTotal} ${modelsTotal > 1 ? 'modèles exécutés' : 'modèle exécuté'}</span>`,
+    `<span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-target"></use></svg>Seuil moyen ${pct(consensus.mean_threshold, 1)}</span>`
+  ];
+  if (modelsOk < modelsTotal) {
+    chips.push(`<span class="chip is-warning"><svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>Consensus partiel</span>`);
+  }
+  $('globalChips').innerHTML = chips.join('');
+
+  const value = Math.min(100, Math.max(0, Number(consensus.mean_prob_abnormal || 0) * 100));
+  gauge.style.setProperty('--value', String(value));
+  gauge.style.setProperty('--gauge-color', abnormal ? 'var(--danger)' : 'var(--ok)');
+  setText('gaugeValue', pct(consensus.mean_prob_abnormal, 1));
+  $('gaugeCaption').innerHTML = `Seuil moyen de décision : <strong>${esc(pct(consensus.mean_threshold, 1))}</strong>`;
+}
+function renderConsensus(data){
+  const consensus = data.consensus;
+  const analysis = data.analysis || [];
+  const badge = $('consensusBadge');
+  badge.classList.remove('is-danger','is-success');
+  if (!consensus) {
+    badge.textContent = 'Indisponible';
+    $('voteBar').innerHTML = '';
+    $('voteLegend').innerHTML = '';
+    $('voteList').innerHTML = analysis.map(row => `
+      <div class="vote-row"><span class="vote-model"><span class="model-avatar sm">${esc(modelAvatar(row.key, row.family, row.label))}</span><span>${esc(row.label || row.family || 'Modèle')}</span></span><span class="badge ${row.status === 'ok' ? (row.prediction || 'unknown') : 'error'}">${row.status === 'ok' ? esc(predictionLabel(row.prediction, true)) : 'Indisponible'}</span></div>
+    `).join('');
+    $('consensusNote').textContent = 'Le consensus ne peut pas être calculé sans au moins un modèle disponible.';
+    return;
+  }
+  const votes = consensus.votes || {};
+  const normal = Number(votes.normal || 0);
+  const abnormal = Number(votes.abnormal || 0);
+  const total = Math.max(1, Number(consensus.models_ok) || normal + abnormal);
+  badge.textContent = 'Consensus · ' + String(predictionLabel(consensus.prediction, true)).toLowerCase();
+  badge.classList.add(consensus.prediction === 'abnormal' ? 'is-danger' : 'is-success');
+  $('voteBar').innerHTML = `
+    <div class="vote-seg normal" style="flex:${normal}">${normal ? normal : ''}</div>
+    <div class="vote-seg abnormal" style="flex:${abnormal}">${abnormal ? abnormal : ''}</div>
+  `;
+  $('voteLegend').innerHTML = `
+    <span><i class="legend-dot"></i>Normal · ${normal}</span>
+    <span><i class="legend-dot abnormal"></i>Anomalie · ${abnormal}</span>
+  `;
+  $('voteList').innerHTML = analysis.map(row => {
+    const ok = row.status === 'ok';
+    return `<div class="vote-row">
+      <span class="vote-model"><span class="model-avatar sm">${esc(modelAvatar(row.key, row.family, row.label))}</span><span>${esc(row.label || row.family || 'Modèle')}</span></span>
+      <span class="badge ${ok ? (row.prediction || 'unknown') : 'error'}">${ok ? esc(predictionLabel(row.prediction, true)) : 'Indisponible'}</span>
+    </div>`;
+  }).join('');
+  const agreement = agreementInfo(consensus);
+  const failed = Number(consensus.models_total || analysis.length) - Number(consensus.models_ok || 0);
+  let note = agreement.detail;
+  if (failed > 0) note += ` ${plural(failed, 'modèle')} ${failed > 1 ? 'n\u2019ont' : 'n\u2019a'} pas pu produire de résultat.`;
+  if (normal === abnormal) note = 'Égalité des votes : le service tranche sur la probabilité moyenne.';
+  $('consensusNote').textContent = note;
+}
+function renderModels(data){
+  const rows = data.analysis || [];
+  if (!rows.length) {
+    $('modelGrid').innerHTML = '<p class="model-error">Aucun résultat individuel disponible.</p>';
+    return;
+  }
+  $('modelGrid').innerHTML = rows.map(row => {
+    const label = row.label || row.family || row.key || 'Modèle';
+    const avatar = modelAvatar(row.key, row.family, label);
+    if (row.status !== 'ok') {
+      return `<article class="model-card is-error">
+        <div class="model-card-head"><span class="model-avatar">${esc(avatar)}</span><div><strong>${esc(label)}</strong></div><span class="badge error">Indisponible</span></div>
+        <p class="model-error">${esc(row.error || 'Ce modèle n\u2019a pas pu produire de résultat.')}</p>
+      </article>`;
+    }
+    const probability = Number(row.prob_abnormal_mean);
+    const threshold = Number(row.threshold);
+    const pPct = Number.isFinite(probability) ? Math.min(100, Math.max(0, probability * 100)) : 0;
+    const tPct = Number.isFinite(threshold) ? Math.min(100, Math.max(0, threshold * 100)) : 50;
+    const prediction = row.prediction === 'abnormal' ? 'abnormal' : row.prediction === 'normal' ? 'normal' : 'unknown';
+    return `<article class="model-card">
+      <div class="model-card-head">
+        <span class="model-avatar">${esc(avatar)}</span>
+        <div><strong>${esc(label)}</strong></div>
+        <span class="badge ${prediction}">${esc(predictionLabel(prediction, true))}</span>
+      </div>
+      <div class="model-prob"><span class="model-prob-value">${esc(pct(probability, 1))}</span><span class="model-prob-label">P(anomalie)</span></div>
+      <div class="prob-track">
+        <span class="prob-fill${prediction === 'abnormal' ? ' is-abnormal' : ''}" style="width:${pPct.toFixed(2)}%"></span>
+        <span class="threshold-marker" style="left:${tPct.toFixed(2)}%"></span>
+      </div>
+      <div class="prob-scale"><span>0 %</span><span>Seuil ${esc(pct(threshold, 1))}</span><span>100 %</span></div>
+      <div class="model-meta"><span>${plural(row.n_segments || 0, 'segment')}</span><span>P max ${esc(pct(row.prob_abnormal_max, 1))}</span></div>
+    </article>`;
+  }).join('');
+}
+
+function renderTechnical(data){
+  const summary = data.feature_summary || {};
+  const items = [
+    ['Fichier', data.filename || (state.file && state.file.name) || '—'],
+    ['Durée', data.duration_s != null ? fmt(data.duration_s, 3) + ' s' : '—'],
+    ['Fréquence d\u2019analyse', data.sample_rate_used != null ? data.sample_rate_used + ' Hz' : '—'],
+    ['Segments', data.n_segments != null ? String(data.n_segments) : '—'],
+    ['Expérience', data.experiment || '—'],
+    ['Suivi MLflow', data.mlflow_tracking_uri_used || '—']
+  ];
+  if (typeof summary.zcr_mean === 'number') items.push(['ZCR moyen', fmt(summary.zcr_mean, 4)]);
+  if (typeof summary.spectral_centroid_hz === 'number') items.push(['Centroïde spectral', fmt(summary.spectral_centroid_hz, 1) + ' Hz']);
+  if (typeof summary.rms_mean === 'number') items.push(['RMS moyen', fmt(summary.rms_mean, 4)]);
+
+  const techGrid = `<div class="tech-grid">${items.map(([label, value]) =>
+    `<div class="tech-item"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
+  ).join('')}</div>`;
+
+  const analysis = data.analysis || [];
+  const techModels = `<div class="tech-models">${analysis.map(row => {
+    const ok = row.status === 'ok';
+    const segmentChips = ok && Array.isArray(row.segment_probs) && row.segment_probs.length
+      ? `<div class="segment-chips">${row.segment_probs.map((p, index) =>
+          `<span class="${Number(p) >= Number(row.threshold) ? 'hi' : ''}">seg ${index + 1} : ${Number(p).toFixed(3)}</span>`
+        ).join('')}</div>`
+      : '';
+    return `<div class="tech-model">
+      <div class="tech-model-head"><strong>${esc(row.label || row.family || row.key || 'Modèle')}</strong><span>${esc(row.family || row.key || '')}</span></div>
+      <dl>
+        <dt>État</dt><dd>${ok ? 'ok' : esc(row.error || 'erreur')}</dd>
+        <dt>Run</dt><dd>${esc(row.mlflow_run_name || '—')}</dd>
+        <dt>Run ID</dt><dd>${esc(row.mlflow_run_id || '—')}</dd>
+        <dt>Seuil</dt><dd>${ok ? esc(fmt(row.threshold, 4)) : '—'}</dd>
+        <dt>P(anomalie) moyenne</dt><dd>${ok ? esc(fmt(row.prob_abnormal_mean, 4)) : '—'}</dd>
+        <dt>P(anomalie) max</dt><dd>${ok ? esc(fmt(row.prob_abnormal_max, 4)) : '—'}</dd>
+        <dt>Segments</dt><dd>${ok ? esc(String(row.n_segments == null ? '—' : row.n_segments)) : '—'}</dd>
+      </dl>
+      ${segmentChips}
+    </div>`;
+  }).join('')}</div>`;
+
+  const json = `<details class="json-details"><summary>Réponse JSON complète</summary><pre>${esc(JSON.stringify(data, null, 2))}</pre></details>`;
+  $('technicalBody').innerHTML = techGrid + techModels + json;
+}
+function renderRecommendations(data){
+  const consensus = data.consensus;
+  const analysis = data.analysis || [];
+  const ok = analysis.filter(row => row.status === 'ok');
+  const failed = analysis.length - ok.length;
+  const votes = (consensus && consensus.votes) || {};
+  const normal = Number(votes.normal || 0);
+  const abnormal = Number(votes.abnormal || 0);
+  const tie = !!consensus && normal === abnormal;
+  const meanProbability = consensus && typeof consensus.mean_prob_abnormal === 'number' ? consensus.mean_prob_abnormal : null;
+  const meanThreshold = consensus && typeof consensus.mean_threshold === 'number' ? consensus.mean_threshold : null;
+  const nearThreshold = meanProbability != null && meanThreshold != null && Math.abs(meanProbability - meanThreshold) <= 0.08;
+
+  let tone = 'warning';
+  let title = 'Analyse incomplète';
+  let body = '';
+  let items = [];
+
+  if (!consensus) {
+    body = 'Le consensus n\u2019a pas pu être établi. Vérifiez que le service d\u2019analyse est disponible et que le fichier est valide.';
+    items = [
+      'Vérifiez que le service CardioAgent-Ops est démarré, puis relancez l\u2019analyse.',
+      'Vérifiez que le fichier est bien un WAV lisible, non vide et non silencieux.',
+      'Consultez les détails techniques ci-dessus pour identifier les modèles indisponibles.'
+    ];
+  } else if (tie) {
+    tone = 'warning';
+    title = 'Les modèles sont partagés';
+    body = 'Les votes sont à égalité. Le service tranche sur la probabilité moyenne, mais le résultat doit être interprété avec prudence.';
+    items = [
+      'Privilégiez un avis professionnel pour interpréter cet enregistrement.',
+      'Vérifiez la qualité de l\u2019enregistrement et répétez-le si nécessaire.',
+      'Tenez compte du contexte clinique et des symptômes éventuels.'
+    ];
+  } else if (nearThreshold) {
+    tone = 'warning';
+    title = 'Résultat proche du seuil';
+    body = `La probabilité moyenne d\u2019anomalie (${pct(meanProbability, 1)}) est proche du seuil de décision (${pct(meanThreshold, 1)}). Le consensus indique « ${predictionLabel(consensus.prediction, true)} », mais ce résultat doit être interprété avec prudence.`;
+    items = consensus.prediction === 'abnormal'
+      ? ['Faites interpréter cet enregistrement par un professionnel de santé.', 'En cas de symptômes, contactez sans délai un service médical.', 'Répétez l\u2019enregistrement pour confirmer l\u2019observation.']
+      : ['Poursuivez la surveillance habituelle.', 'Consultez un professionnel de santé si des symptômes apparaissent.', 'Répétez l\u2019enregistrement pour confirmer l\u2019observation.'];
+  } else if (consensus.prediction === 'abnormal') {
+    tone = 'danger';
+    title = 'Un avis professionnel est recommandé';
+    body = 'Le consensus des modèles classe ce signal comme anormal. Ce résultat est une aide à l\u2019analyse et ne constitue pas un diagnostic.';
+    items = [
+      'Faites interpréter cet enregistrement par un professionnel de santé (cardiologue).',
+      'En cas de symptômes (douleur thoracique, essoufflement, palpitations, malaise), contactez sans délai un service médical.',
+      'Joignez le contexte clinique et, si possible, un enregistrement plus long.'
+    ];
+  } else if (consensus.prediction === 'normal') {
+    tone = 'success';
+    title = 'Aucune anomalie détectée par le consensus';
+    body = 'Les modèles classent majoritairement ce signal comme normal. Ce résultat ne remplace pas un avis médical, en particulier en présence de symptômes.';
+    items = [
+      'Poursuivez la surveillance habituelle.',
+      'Consultez un professionnel de santé si des symptômes apparaissent.',
+      'Répétez l\u2019enregistrement si la qualité du signal est insuffisante.'
+    ];
+  }
+
+  if (failed > 0) body += ` ${plural(failed, 'modèle')} ${failed > 1 ? 'n\u2019ont' : 'n\u2019a'} pas contribué au consensus.`;
+  body += ' Ces recommandations sont dérivées du résultat et de la qualité du signal.';
+
+  const icon = tone === 'danger' ? 'i-alert' : tone === 'success' ? 'i-check' : 'i-info';
+  $('recommendationMain').innerHTML = `<div class="recommendation-main is-${tone}">
+    <h3 class="rec-title"><svg class="icon" aria-hidden="true"><use href="#${icon}"></use></svg>${esc(title)}</h3>
+    <p>${esc(body)}</p>
+  </div>`;
+  $('recommendationList').innerHTML = items.map(item =>
+    `<li><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg><span>${esc(item)}</span></li>`
+  ).join('');
+
+  const duration = Number(data.duration_s);
+  const quality = [];
+  if (Number.isFinite(duration)) {
+    if (duration < 5) quality.push('Enregistrement court (< 5 s) : privilégiez un signal de 10 à 30 s pour une analyse plus stable.');
+    else if (duration > 60) quality.push('Enregistrement long : l\u2019analyse répartit les segments sur le signal.');
+    else quality.push('Durée compatible avec l\u2019analyse.');
+  }
+  if (state.peak >= 0.999) quality.push('Le signal semble saturé (amplitude crête proche de 1). Réduisez le gain lors d\u2019un prochain enregistrement.');
+  if (state.rms > 0 && state.rms < 0.005) quality.push('Le niveau moyen du signal est faible. Vérifiez le placement du capteur et le gain.');
+  if (!quality.length) quality.push('Aucun point d\u2019attention détecté sur la durée et le niveau du signal.');
+
+  $('qualityNote').innerHTML = `<h3><svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>Qualité de l\u2019enregistrement</h3>
+    <ul>${quality.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`;
+}
+function renderResults(data){
+  state.result = data;
+  setHidden('gettingStarted', true);
+  setHidden('results', false);
+  const filename = data.filename || (state.file && state.file.name) || 'Signal';
+  const segmentCount = Number(data.n_segments || 0);
+  setText('resultsSubtitle', `${filename} · ${plural(segmentCount, 'segment')} analysé${segmentCount > 1 ? 's' : ''} · ${fmt(data.duration_s, 2)} s`);
+  const timeSpan = $('resultTime').querySelector('span');
+  if (timeSpan) timeSpan.textContent = formatDateTime(new Date());
+  renderFeatureStrip(data);
+  renderGlobal(data);
+  renderConsensus(data);
+  renderModels(data);
+  renderTechnical(data);
+  renderRecommendations(data);
+  $('technicalDetails').open = false;
+  setStep(3);
+}
+function init(){
+  drawBase();
+  updateActionState();
+  setStep(1);
+  setRunStatus('Prêt à analyser un signal.', 'info');
+  probeServices();
+  window.addEventListener('load', () => { drawBase(); drawOverlay(); });
+  window.addEventListener('focus', () => {
+    if (!state.service && !state.probing) probeServices();
+  });
+}
+init();
+</script>
+</body>
+</html>
