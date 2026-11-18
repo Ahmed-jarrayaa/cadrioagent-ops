@@ -1,24 +1,31 @@
-# Pipeline SVM - CardioAgent-Ops
+# Pipeline SVM — note complémentaire
 
-Depuis la racine du projet (`Data Mining/`), environnement virtuel active (`.\.venv\Scripts\Activate.ps1`),
-MLflow demarre (`docker compose up -d mlflow-server`).
+Ce document complète le [README principal](README.md). Le pipeline SVM est désormais entraîné
+dans le notebook **`audio_engine/SVM.ipynb`** ; les anciens scripts `prepare_data.py`,
+`train_svm.py`, `make_plots.py` et `check_onnx.py` ne font plus partie du dépôt.
 
-| Etape | Commande | Resultat |
+## Démarrage rapide
+
+Depuis la racine du projet, environnement virtuel activé
+(`.\.venv\Scripts\Activate.ps1`) :
+
+| Étape | Commande | Résultat |
 |---|---|---|
-| 0. Dependances | `python -m pip install -r requirements-train.txt` | |
-| 1. Donnees | `python audio_engine/prepare_data.py` | `ourdataset/processed/dataset_2000hz.npz` |
-| 2. Entrainement | `python audio_engine/train_svm.py` | modele ONNX + metriques + run MLflow |
-| 3. Graphiques | `python audio_engine/make_plots.py` | `audio_engine/models/plots/*.png` |
-| 4. Verification | `python audio_engine/check_onnx.py` | ecart ONNX vs scikit-learn (~1e-6) |
-| 5. Service | `docker compose up -d --build audio-engine` | `/predict` charge le modele |
+| 0. Dépendances | `python -m pip install -r requirements-train.txt` | |
+| 1. MLflow (optionnel) | `docker compose up -d mlflow-server` | serveur MLflow sur `:5000` |
+| 2. Entraînement | exécuter `audio_engine/SVM.ipynb` | `audio_engine/models/best_svm.joblib` + `best_svm_meta.json` + run MLflow |
+| 3. Vérification | `cd audio_engine` puis `python analyze_signal.py ..\ourdataset\train\abnormal\112_1306243000964_A.wav --families svm` | prédiction SVM |
+| 4. Service | `python -m uvicorn server:app --host 127.0.0.1 --port 8001` (depuis `audio_engine/`) | API `/predict_one?family=svm` |
 
-Les etapes 2, 3 et 4 sont des scripts separes a dessein : sous Windows, charger matplotlib, onnx et
-onnxruntime dans le meme processus peut provoquer un plantage de DLL (access violation).
+## Fichiers actuels
 
-## Fichiers
-- `preprocess.py` : pretraitement (2000 Hz, filtre 25-400 Hz, segments de 5 s, MFCC/ZCR/centroide/RMS).
-  Utilise par `prepare_data.py` ET par `server.py` : jamais de divergence entre entrainement et inference.
-- `prepare_data.py` : inventaire, doublons, fichiers illisibles/trop courts/silencieux, split 70/15/15 par enregistrement.
-- `train_svm.py` : SVM RBF, seuil regle sur la validation (Recall max avec specificite >= 0,8), MLflow, export ONNX.
-- `make_plots.py`, `check_onnx.py` : graphiques et verification.
-- `server.py` : service FastAPI d'inference (conteneur audio-engine).
+- `audio_engine/preprocess.py` : prétraitement commun (2 000 Hz, filtre 25–400 Hz, segments de
+  5 s, 46 caractéristiques MFCC/ZCR/centroïde/RMS). Utilisé à l'entraînement **et** à l'inférence.
+- `audio_engine/SVM.ipynb` : `GridSearchCV` + `GroupKFold(3)`, seuil réglé sur la validation
+  (rappel maximal avec spécificité ≥ 0,80), suivi MLflow.
+- `audio_engine/registry.py` : chargement du modèle, prédiction par segment et agrégation.
+- `audio_engine/models/best_svm.joblib` + `best_svm_meta.json` : artefacts servis par l'API.
+- `audio_engine/models/plots/` : matrices de confusion, courbes ROC et comparaisons.
+
+> Sous Windows, éviter de charger `matplotlib`, `onnx` et `onnxruntime` dans le même processus :
+> exécuter les étapes d'entraînement, de tracé et de vérification séparément.

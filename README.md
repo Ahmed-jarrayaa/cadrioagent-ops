@@ -447,7 +447,7 @@ curl.exe -s -X POST "http://127.0.0.1:8001/predict_all?families=svm,tree,cnn" `
   -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav"
 
 curl.exe -s -X POST "http://127.0.0.1:8001/predict_one?family=svm" `
-  -F "file=@ourdataset/train/normal/201101091153.wav"
+  -F "file=@ourdataset/train/normal/101_1305030823364_B.wav"
 ```
 
 Réponse simplifiée de `/predict_all` :
@@ -513,7 +513,7 @@ curl.exe -s -X POST "http://127.0.0.1:8085/analyze_all?families=svm,cnn" `
   -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav"
 
 curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
-  -F "file=@ourdataset/train/normal/201101091153.wav"
+  -F "file=@ourdataset/train/normal/101_1305030823364_B.wav"
 ```
 
 ---
@@ -527,7 +527,7 @@ cd audio_engine
 
 python analyze_signal.py ..\ourdataset\train\abnormal\112_1306243000964_A.wav
 python analyze_signal.py ..\ourdataset\train\abnormal\112_1306243000964_A.wav --json
-python analyze_signal.py ..\ourdataset\train\normal\201101091153.wav --families svm,cnn
+python analyze_signal.py ..\ourdataset\train\normal\101_1305030823364_B.wav --families svm,cnn
 ```
 
 Sortie lisible :
