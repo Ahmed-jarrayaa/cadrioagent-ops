@@ -52,6 +52,8 @@ llm_finetuning/export/merged/
 llm_finetuning/export/llama.cpp/
 # Base MLflow locale
 llm_finetuning/mlruns.db
+# Environnement virtuel dédié au LLM local
+llm_finetuning/.venv-llm/
 
 # --- Divers OS / éditeurs ------------------------------------------------------
 .DS_Store

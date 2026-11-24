@@ -307,6 +307,19 @@ En cas de `CUDA out of memory` : fermer navigateur/jeux, passer `max_seq_length`
 > L'export GGUF local demande ~6 Go de plus (fusion fp16 + GGUF f16). Sur 15 Go libres, il est
 > préférable de l'exécuter sur Colab, ou de supprimer les intermédiaires au fur et à mesure.
 
+> ⚠️ Cette installation modifie le `.venv` partagé : elle remplace `torch` par un build CUDA et
+> change les versions de `transformers`/`numpy`, ce qui peut impacter la partie audio. Pour éviter
+> tout effet de bord, créer un environnement dédié :
+>
+> ```powershell
+> python -m venv llm_finetuning\.venv-llm
+> .\llm_finetuning\.venv-llm\Scripts\Activate.ps1
+> pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+> pip install --no-cache-dir -r llm_finetuning\requirements-llm-local.txt
+> ```
+>
+> `llm_finetuning/.venv-llm/` est ignoré par Git.
+
 ---
 
 ## 6. Suivi MLflow
