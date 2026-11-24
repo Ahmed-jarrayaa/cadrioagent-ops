@@ -27,6 +27,17 @@ from llm_finetuning.src.data import (
 )
 
 
+def _free_cuda() -> None:
+    """Libère les blocs CUDA inutilisés pour éviter la fragmentation (petits GPU)."""
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def _training_arguments(training_cfg: dict[str, Any]):
     from transformers import TrainingArguments
 
@@ -55,6 +66,10 @@ def _training_arguments(training_cfg: dict[str, Any]):
         "seed": int(training_cfg.get("seed", 42)),
         "report_to": list(training_cfg.get("report_to", [])),
         "dataloader_num_workers": int(training_cfg.get("dataloader_num_workers", 0)),
+        # On ne calcule que la perte en évaluation : les logits complets ne sont pas
+        # matérialisés, ce qui évite un pic mémoire inutile sur les petits GPU.
+        "prediction_loss_only": bool(training_cfg.get("prediction_loss_only", True)),
+        "eval_accumulation_steps": int(training_cfg.get("eval_accumulation_steps", 1)),
     }
     # transformers >= 4.46 renomme evaluation_strategy en eval_strategy.
     try:
@@ -79,7 +94,23 @@ def _build_trainer(model, tokenizer, config: dict[str, Any], train_dataset, eval
             output_dir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(config["_config_path"], output_dir / "training_config.yaml")
 
+    class ReleaseCudaCallback(TrainerCallback):
+        """Rend la mémoire GPU au driver après chaque évaluation.
+
+        Sur 4 Go, l'allocation/désallocation répétée des activations pendant
+        l'évaluation fragmente le cache CUDA et finit en OOM. Vider le cache
+        après chaque éval maintient le pic mémoire stable.
+        """
+
+        def on_evaluate(self, args, state, control, **kwargs):
+            _free_cuda()
+
+        def on_step_end(self, args, state, control, **kwargs):
+            if state.global_step % 25 == 0:
+                _free_cuda()
+
     callbacks.append(SaveConfigCallback())
+    callbacks.append(ReleaseCudaCallback())
 
     common = {
         "model": model,

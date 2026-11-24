@@ -292,8 +292,9 @@ Si Colab n'est pas disponible, le 1.5B peut être entraîné **réellement** sur
   --config llm_finetuning\configs\qlora_qwen25_1_5b_local.yaml
 ```
 
-Différences avec la config 7B : `max_seq_length: 768` (le dataset fait moins de 600 caractères),
-`r=16`, `gradient_accumulation_steps: 8`, `dataloader_num_workers: 0`, `save_total_limit: 1`.
+Différences avec la config 7B : `max_seq_length: 512` (le dataset fait moins de 600 caractères),
+`r=16`, `gradient_accumulation_steps: 8`, `dataloader_num_workers: 0`, `save_total_limit: 1`,
+évaluation une fois par époque (`eval_steps: 50`).
 
 | Ressource | Estimation |
 |---|---|
@@ -301,8 +302,10 @@ Différences avec la config 7B : `max_seq_length: 768` (le dataset fait moins de
 | Durée (2 époques, 450 exemples) | ~30–60 min |
 | Disque | torch CUDA + modèle ≈ 7 Go |
 
-En cas de `CUDA out of memory` : fermer navigateur/jeux, passer `max_seq_length` à 512, puis
-`gradient_accumulation_steps` à 16.
+En cas de `CUDA out of memory` : fermer navigateur/jeux, descendre `max_seq_length` à 384, puis
+`gradient_accumulation_steps` à 16. Le code libère déjà le cache CUDA après chaque évaluation et
+tous les 25 pas (`ReleaseCudaCallback`), et n'accumule pas les logits en éval
+(`prediction_loss_only: true`).
 
 > L'export GGUF local demande ~6 Go de plus (fusion fp16 + GGUF f16). Sur 15 Go libres, il est
 > préférable de l'exécuter sur Colab, ou de supprimer les intermédiaires au fur et à mesure.
