@@ -41,6 +41,18 @@ mlflow.db
 # --- Poids de LLM (volumineux, à télécharger séparément) ----------------------
 *.gguf
 
+# --- Fine-tuning LLM -----------------------------------------------------------
+# Texte brut extrait des PDF (droits non redistribuables)
+llm_finetuning/data/raw/
+# Sorties d'entraînement, adaptateurs et rapports locaux
+llm_finetuning/outputs/
+# Poids et exports volumineux
+llm_finetuning/export/*.gguf
+llm_finetuning/export/merged/
+llm_finetuning/export/llama.cpp/
+# Base MLflow locale
+llm_finetuning/mlruns.db
+
 # --- Divers OS / éditeurs ------------------------------------------------------
 .DS_Store
 Thumbs.db

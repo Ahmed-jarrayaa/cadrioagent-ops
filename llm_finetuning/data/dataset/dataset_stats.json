@@ -1,0 +1,72 @@
+{
+  "version": "1.0.0",
+  "total": 590,
+  "splits": {
+    "train": {
+      "total": 450,
+      "by_lang": {
+        "en": 225,
+        "fr": 225
+      },
+      "by_format": {
+        "patient_en": 68,
+        "patient_fr": 68,
+        "qa_en": 68,
+        "qa_fr": 68,
+        "reverse_en": 68,
+        "reverse_fr": 68,
+        "guardrail": 42
+      },
+      "by_source": {
+        "auscultation_cardiaque_normale": 180,
+        "esc_evaluation_cardiovasculaire": 228,
+        "guardrails": 42
+      },
+      "unique_cards": 110
+    },
+    "validation": {
+      "total": 70,
+      "by_lang": {
+        "en": 35,
+        "fr": 35
+      },
+      "by_format": {
+        "patient_en": 11,
+        "patient_fr": 11,
+        "qa_en": 11,
+        "qa_fr": 11,
+        "reverse_en": 11,
+        "reverse_fr": 11,
+        "guardrail": 4
+      },
+      "by_source": {
+        "auscultation_cardiaque_normale": 30,
+        "esc_evaluation_cardiovasculaire": 36,
+        "guardrails": 4
+      },
+      "unique_cards": 15
+    },
+    "test": {
+      "total": 70,
+      "by_lang": {
+        "en": 35,
+        "fr": 35
+      },
+      "by_format": {
+        "patient_en": 11,
+        "patient_fr": 11,
+        "qa_en": 11,
+        "qa_fr": 11,
+        "reverse_en": 11,
+        "reverse_fr": 11,
+        "guardrail": 4
+      },
+      "by_source": {
+        "auscultation_cardiaque_normale": 30,
+        "esc_evaluation_cardiovasculaire": 36,
+        "guardrails": 4
+      },
+      "unique_cards": 15
+    }
+  }
+}

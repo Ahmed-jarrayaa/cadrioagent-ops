@@ -1,0 +1,39 @@
+{
+  "dataset_name": "cardioagent-llm-fr-en",
+  "version": "1.0.0",
+  "language": ["fr", "en"],
+  "task": "instruction tuning (QLoRA) — éducation en cardiologie",
+  "disclaimer": "Corpus pédagogique. Ne constitue pas un dispositif médical ni une aide au diagnostic. Ne pas utiliser pour une décision clinique.",
+  "sources": [
+    {
+      "id": "auscultation_cardiaque_normale",
+      "title": "Auscultation cardiaque normale",
+      "author": "Dr F. Touati — Faculté de médecine, Université Salah Boubenider Constantine 3",
+      "year": "2024-2025",
+      "type": "Support de cours universitaire (PDF fourni)",
+      "url": null,
+      "license": "Droits non explicitement précisés — usage académique interne",
+      "usage": "Corpus pédagogique interne ; le texte intégral n'est pas redistribué. Toute réutilisation publique nécessite l'accord de l'auteur.",
+      "file": "rag_engine/Auscultation-cardiaque-normale-4-4.pdf"
+    },
+    {
+      "id": "esc_evaluation_cardiovasculaire",
+      "title": "Les nouvelles recommandations de la Société européenne de cardiologie sur l'évaluation cardiovasculaire changent-elles ma pratique ?",
+      "author": "Pierre Huette, Osama Abou-Arab",
+      "year": "2023",
+      "type": "Article de synthèse (PDF fourni, HAL)",
+      "url": "https://u-picardie.hal.science/hal-04166622v1",
+      "doi": "10.1016/j.pratan.2023.06.009",
+      "license": "CC BY-NC 4.0",
+      "usage": "Usage non commercial avec attribution. Pas de redistribution commerciale.",
+      "file": "rag_engine/S127979602300089X.pdf"
+    }
+  ],
+  "guardrails": {
+    "id": "guardrails",
+    "title": "Consignes de sécurité et de non-diagnostic",
+    "author": "Projet CardioAgent-Ops",
+    "license": "Contenu original du projet (à des fins pédagogiques)",
+    "usage": "Réponses de refus/redirection ; ne contient aucune donnée médicale nouvelle."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "model_name": "cardio-llm",
+  "base_model": "Qwen/Qwen2.5-7B-Instruct",
+  "base_model_revision": "main",
+  "adapter": "llm_finetuning/outputs/qwen25-7b-cardio/adapter",
+  "quantization": "q4_k_m",
+  "gguf_file": "cardio-llm-q4_k_m.gguf",
+  "gguf_size_bytes": 0,
+  "gguf_sha256": "remplacé par export_gguf.py",
+  "created_at": "2026-01-01T00:00:00+00:00",
+  "dataset_version": "cardioagent-llm-fr-en v1.0.0",
+  "license_note": "Vérifier la licence du modèle de base (Qwen2.5 : Apache-2.0) et des sources.",
+  "disclaimer": "Modèle pédagogique. Pas un dispositif médical. Ne pas utiliser pour diagnostiquer."
+}
