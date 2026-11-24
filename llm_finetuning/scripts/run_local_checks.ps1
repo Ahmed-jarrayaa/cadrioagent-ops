@@ -13,4 +13,7 @@ python -m pytest llm_finetuning\tests -q
 Write-Host "== Dry-run de la configuration 7B =="
 python -m llm_finetuning.src.train --config llm_finetuning\configs\qlora_qwen25_7b.yaml --dry-run
 
+Write-Host "== Dry-run de la configuration locale 1.5B =="
+python -m llm_finetuning.src.train --config llm_finetuning\configs\qlora_qwen25_1_5b_local.yaml --dry-run
+
 Write-Host "== OK =="

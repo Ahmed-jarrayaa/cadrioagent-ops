@@ -1,0 +1,24 @@
+# Dépendances pour l'entraînement LOCAL Windows (GPU 4 Go, sans Unsloth).
+# Installer torch CUDA AVANT ce fichier :
+#   pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+#
+# Puis :
+#   pip install --no-cache-dir -r llm_finetuning/requirements-llm-local.txt
+
+transformers==4.46.3
+trl==0.12.2
+peft==0.14.0
+bitsandbytes==0.45.5
+datasets==3.2.0
+accelerate==1.2.1
+sentencepiece>=0.2.0
+protobuf>=4.25.0
+
+mlflow>=2.16.2,<3
+rouge-score>=0.1.2
+sacrebleu>=2.4.0
+numpy<2.0
+pandas
+pyyaml
+
+pytest>=8.0

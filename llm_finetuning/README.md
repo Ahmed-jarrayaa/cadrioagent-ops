@@ -44,14 +44,17 @@ préparer l'export. L'entraînement réel se fait sur Colab.
 llm_finetuning/
 ├── README.md                     # ce document
 ├── requirements-llm.txt          # stack Colab/Linux
+├── requirements-llm-local.txt    # stack Windows locale (sans Unsloth)
 ├── configs/
 │   ├── qlora_qwen25_7b.yaml      # configuration principale
-│   └── qlora_qwen25_1_5b.yaml    # repli / smoke test
+│   ├── qlora_qwen25_1_5b.yaml    # repli / smoke test
+│   └── qlora_qwen25_1_5b_local.yaml  # GPU 4 Go (Windows natif)
 ├── data/
 │   ├── sources.json              # registre des sources et licences
 │   ├── seed_facts.jsonl          # 90 fiches de faits ancrées (FR/EN)
 │   ├── seed_guardrails.jsonl     # 50 consignes de sécurité (FR/EN)
 │   ├── build_dataset.py          # génération + découpage + contrôles
+│   ├── verify_sources.py         # empreintes des PDF + texte extrait
 │   ├── raw/                      # texte extrait des PDF (non versionné)
 │   └── dataset/
 │       ├── train.jsonl
@@ -73,6 +76,7 @@ llm_finetuning/
 ├── scripts/
 │   ├── run_colab.sh
 │   ├── run_local_checks.ps1
+│   ├── train_local.ps1
 │   └── ollama_smoke_test.ps1
 ├── export/
 │   ├── Modelfile.template
@@ -205,6 +209,18 @@ pytest llm_finetuning/tests -q
 
 > Ne pas installer toute la stack d'entraînement sur la machine locale : le disque est limité.
 
+### 4.3 Notebook portable
+
+`notebooks/colab_finetune.ipynb` fonctionne **sur Colab et en local** :
+
+- la première cellule détecte la racine du dépôt (ou clone dans `/content` sur Colab) et s'y place ;
+- la configuration est choisie selon la VRAM : **7B si ≥ 12 Go**, **1.5B local sinon** ;
+- les dépendances installées dépendent de l'OS : `requirements-llm.txt` (Linux/Colab) ou
+  `requirements-llm-local.txt` (Windows) ;
+- l'export GGUF est sauté sur Windows (nécessite `cmake` + llama.cpp sur Colab/Linux).
+
+Les sorties d'exécution ne sont pas versionnées, et les chemins sont relatifs au dépôt.
+
 ---
 
 ## 5. Entraînement QLoRA
@@ -253,6 +269,43 @@ llm_finetuning/outputs/qwen25-7b-cardio/
 ├── trainer_state.json
 └── training_config.yaml
 ```
+
+### 5.4 Entraînement local 1.5B (GPU 4 Go)
+
+Si Colab n'est pas disponible, le 1.5B peut être entraîné **réellement** sur la machine locale
+(RTX 2050, 4 Go). Le 7B, lui, reste impossible : 4 Go de VRAM et ~16 Go de disque ne suffisent pas.
+
+```powershell
+# 1) Remplacer le torch CPU par un build CUDA (~2,4 Go, une seule fois)
+.\.venv\Scripts\python.exe -m pip install --no-cache-dir torch==2.5.1 `
+  --index-url https://download.pytorch.org/whl/cu121
+
+# 2) Stack PEFT/TRL/bitsandbytes (sans Unsloth, non supporté sur Windows natif)
+.\.venv\Scripts\python.exe -m pip install --no-cache-dir `
+  -r llm_finetuning\requirements-llm-local.txt
+
+# 3) Vérification
+.\.venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available())"
+
+# 4) Entraînement
+.\.venv\Scripts\python.exe -m llm_finetuning.src.train `
+  --config llm_finetuning\configs\qlora_qwen25_1_5b_local.yaml
+```
+
+Différences avec la config 7B : `max_seq_length: 768` (le dataset fait moins de 600 caractères),
+`r=16`, `gradient_accumulation_steps: 8`, `dataloader_num_workers: 0`, `save_total_limit: 1`.
+
+| Ressource | Estimation |
+|---|---|
+| VRAM | ~3 Go / 4 Go |
+| Durée (2 époques, 450 exemples) | ~30–60 min |
+| Disque | torch CUDA + modèle ≈ 7 Go |
+
+En cas de `CUDA out of memory` : fermer navigateur/jeux, passer `max_seq_length` à 512, puis
+`gradient_accumulation_steps` à 16.
+
+> L'export GGUF local demande ~6 Go de plus (fusion fp16 + GGUF f16). Sur 15 Go libres, il est
+> préférable de l'exécuter sur Colab, ou de supprimer les intermédiaires au fur et à mesure.
 
 ---
 

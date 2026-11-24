@@ -74,3 +74,14 @@ def test_invalid_lora_rank_rejected():
     broken["lora"]["r"] = 0
     with pytest.raises(ConfigError):
         validate_config(broken)
+
+
+def test_local_config_fits_4gb_gpu():
+    config = load_config("llm_finetuning/configs/qlora_qwen25_1_5b_local.yaml")
+    assert config["model"]["name"] == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert config["model"]["load_in_4bit"] is True
+    assert config["model"]["max_seq_length"] <= 1024
+    assert config["training"]["per_device_train_batch_size"] == 1
+    assert config["training"]["gradient_accumulation_steps"] >= 8
+    assert config["training"]["gradient_checkpointing"] is True
+    assert "local" in config["training"]["output_dir"]
