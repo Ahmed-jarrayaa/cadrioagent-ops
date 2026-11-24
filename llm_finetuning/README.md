@@ -292,20 +292,26 @@ Si Colab n'est pas disponible, le 1.5B peut être entraîné **réellement** sur
   --config llm_finetuning\configs\qlora_qwen25_1_5b_local.yaml
 ```
 
-Différences avec la config 7B : `max_seq_length: 512` (le dataset fait moins de 600 caractères),
-`r=16`, `gradient_accumulation_steps: 8`, `dataloader_num_workers: 0`, `save_total_limit: 1`,
-évaluation une fois par époque (`eval_steps: 50`).
+Différences avec la config 7B : `max_seq_length: 384`, LoRA **sur l'attention seule**
+(`q/k/v/o_proj`, ~5,5 M paramètres entraînables au lieu de 18,5 M), `gradient_accumulation_steps: 8`,
+`dataloader_num_workers: 0`, `save_total_limit: 1`, évaluation une fois par époque (`eval_steps: 50`).
 
-| Ressource | Estimation |
+| Ressource | Mesuré |
 |---|---|
-| VRAM | ~3 Go / 4 Go |
-| Durée (2 époques, 450 exemples) | ~30–60 min |
+| VRAM | ~3,4 Go / 4 Go (pic) |
+| Durée (2 époques, 112 pas) | **37 min 49 s** |
+| `train_loss` | 1,40 (moyenne sur le run) |
+| `eval_loss` | 2,20 → **1,148** |
 | Disque | torch CUDA + modèle ≈ 7 Go |
 
-En cas de `CUDA out of memory` : fermer navigateur/jeux, descendre `max_seq_length` à 384, puis
-`gradient_accumulation_steps` à 16. Le code libère déjà le cache CUDA après chaque évaluation et
-tous les 25 pas (`ReleaseCudaCallback`), et n'accumule pas les logits en éval
-(`prediction_loss_only: true`).
+Pourquoi ces réglages : au-delà de ~3,7 Go utilisés, le pilote Windows **paginait la VRAM sur le
+disque** (pas de 7 s → 60-100 s, évals de 20 s → 120 s) sans jamais lever d'OOM. Le passage à
+`max_seq_length: 384` et au LoRA attention seule a ramené le pic à ~3,4 Go.
+
+En cas de `CUDA out of memory` : fermer les jeux/navigateur (ils consomment de la VRAM partagée),
+descendre `max_seq_length` à 256, puis `gradient_accumulation_steps` à 16. Le code libère déjà le
+cache CUDA après chaque évaluation et tous les 25 pas (`ReleaseCudaCallback`), et n'accumule pas les
+logits en éval (`prediction_loss_only: true`).
 
 > L'export GGUF local demande ~6 Go de plus (fusion fp16 + GGUF f16). Sur 15 Go libres, il est
 > préférable de l'exécuter sur Colab, ou de supprimer les intermédiaires au fur et à mesure.

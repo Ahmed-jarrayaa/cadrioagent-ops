@@ -2,8 +2,10 @@
 # Objectif : entraînement réellement exécutable en local, sans Unsloth (Windows natif),
 # avec Transformers + PEFT + TRL + bitsandbytes.
 #
-# Mémoire : le dataset est court (max ~583 caractères), d'où max_seq_length réduit à 512.
+# Mémoire : le dataset est court (max ~583 caractères), d'où max_seq_length réduit à 384.
 # L'évaluation n'a lieu qu'une fois par époque (112 pas au total) pour limiter les pics VRAM.
+# Contrainte mesurée : au-delà de ~3,7 Go utilisés, le pilote Windows pagine la VRAM
+# (pas de 7 s -> 100 s). Toute hausse doit être validée par un run de 10 pas.
 
 model:
   name: Qwen/Qwen2.5-1.5B-Instruct
@@ -13,7 +15,7 @@ model:
   bnb_4bit_quant_type: nf4
   bnb_4bit_use_double_quant: true
   bnb_4bit_compute_dtype: float16
-  max_seq_length: 512
+  max_seq_length: 384
   dtype: float16
 
 lora:
@@ -21,14 +23,13 @@ lora:
   alpha: 32
   dropout: 0.05
   bias: none
+  # Attention seulement : sur 4 Go, ajouter les projections MLP (gate/up/down)
+  # fait dépasser 3,9 Go et le pilote Windows pagine sur le disque (60-100 s/pas).
   target_modules:
     - q_proj
     - k_proj
     - v_proj
     - o_proj
-    - gate_proj
-    - up_proj
-    - down_proj
   use_gradient_checkpointing: true
 
 training:

@@ -10,8 +10,6 @@ import os
 os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("USE_FLAX", "0")
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
-# Réduit la fragmentation mémoire sur les petits GPU (Windows ne supporte pas
-# expandable_segments ni expandable_segments:True).
-os.environ.setdefault(
-    "PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8,max_split_size_mb:128"
-)
+# Pas de PYTORCH_CUDA_ALLOC_CONF : sur WDDM, garbage_collection_threshold provoque
+# des libérations fréquentes et max_split_size_mb casse les grosses allocations.
+# La mémoire est gérée explicitement (torch.cuda.empty_cache après éval/pas).
