@@ -55,7 +55,6 @@ def _training_arguments(training_cfg: dict[str, Any]):
         "seed": int(training_cfg.get("seed", 42)),
         "report_to": list(training_cfg.get("report_to", [])),
         "dataloader_num_workers": int(training_cfg.get("dataloader_num_workers", 0)),
-        "remove_unused_columns": False,
     }
     # transformers >= 4.46 renomme evaluation_strategy en eval_strategy.
     try:

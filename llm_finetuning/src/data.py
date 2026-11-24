@@ -89,18 +89,17 @@ def format_for_generation(record: dict[str, Any], tokenizer) -> str:
 
 
 def load_text_dataset(path: str | Path, tokenizer) -> Any:
-    """Charge un JSONL et renvoie un ``datasets.Dataset`` avec le champ ``text``."""
+    """Charge un JSONL et renvoie un ``datasets.Dataset`` avec le seul champ ``text``.
+
+    Les colonnes de traçabilité (``id``, ``lang``) sont volontairement exclues :
+    le collator de TRL attend uniquement le texte à tokeniser, et des colonnes
+    supplémentaires provoquent des erreurs de padding.
+    """
     from datasets import Dataset
 
     records = load_records(path)
     texts = [format_for_training(record, tokenizer) for record in records]
-    return Dataset.from_dict(
-        {
-            "text": texts,
-            "id": [record["id"] for record in records],
-            "lang": [record["meta"]["lang"] for record in records],
-        }
-    )
+    return Dataset.from_dict({"text": texts})
 
 
 def iter_records(paths: Iterable[str | Path]) -> Iterable[dict[str, Any]]:

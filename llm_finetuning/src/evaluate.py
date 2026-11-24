@@ -177,6 +177,17 @@ def compute_metrics(predictions: list[dict[str, Any]]) -> dict[str, float]:
     return metrics
 
 
+def _free_cuda() -> None:
+    """Libère la mémoire GPU entre deux modèles (base vs fine-tuné)."""
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def evaluate_model(
     config: dict[str, Any],
     *,
@@ -209,6 +220,8 @@ def evaluate_model(
         if index % 10 == 0 or index == len(records):
             print(f"[eval] {index}/{len(records)}")
 
+    del model
+    _free_cuda()
     return compute_metrics(predictions), predictions
 
 
