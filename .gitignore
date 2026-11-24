@@ -27,6 +27,11 @@ CardioAgent-Ops-interface-enrichie.html
 audio_engine/models/tp3_cnn_mels.npy
 # Caches Mel du dataset (jusqu'à 955 Mo par fichier)
 ourdataset/processed/mel_cache_cnn/
+# Poids et caches de transfer learning / CNN dépassant 100 Mo (GitHub)
+audio_engine/models/tp3_cnn_mels_64x128.npy
+audio_engine/models/best_tl_resnet18.keras
+audio_engine/models/best_tl_resnet50.keras
+audio_engine/models/best_tl_vgg16.keras
 
 # --- Artefacts MLflow locaux ---------------------------------------------------
 mlruns/

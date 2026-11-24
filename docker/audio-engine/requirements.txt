@@ -10,5 +10,4 @@ mlflow==2.16.2
 # modèles du TP3 servis par registry.py (SVM, arbre de décision) et le CNN
 scikit-learn
 joblib
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
+tensorflow==2.20.0

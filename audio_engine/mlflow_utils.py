@@ -8,6 +8,7 @@ injoignable (TP hors ligne), on bascule sur un stockage SQLite local
 
 from __future__ import annotations
 
+import math
 import os
 import platform
 from pathlib import Path
@@ -49,6 +50,35 @@ def _flatten(prefix, value, out):
         out[prefix[:250]] = str(value)[:5000]
 
 
+def _log_histories(histories: list | None) -> None:
+    """Enregistre des courbes (learning curve ou history Keras) dans le run courant.
+
+    Chaque entrée a la forme ``{"fold": 1, "steps": [...], "metrics": {...}}``.
+    Les métriques deviennent ``fold1_<nom>`` et sont tracées avec ``step`` pour
+    que l'interface MLflow affiche directement la courbe.
+    """
+    for entry in histories or []:
+        fold = entry.get("fold", "?")
+        metrics = entry.get("metrics") or entry.get("history") or {}
+        steps = entry.get("steps")
+        for name, values in metrics.items():
+            for i, value in enumerate(values):
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(numeric):
+                    continue
+                step = int(steps[i]) if steps is not None and i < len(steps) else i
+                mlflow.log_metric(f"fold{fold}_{name}", numeric, step=step)
+
+    if histories:
+        try:
+            mlflow.log_dict({"histories": histories}, "histories.json")
+        except Exception as error:                   # types non sérialisables
+            print(f"[MLflow] histories.json ignoré : {error}")
+
+
 def log_classifier_run(
     *,
     run_name: str,
@@ -56,6 +86,7 @@ def log_classifier_run(
     params: dict,
     mean_metrics: dict,
     fold_metrics: list | None = None,
+    histories: list | None = None,
     artifacts: dict | None = None,
     input_example=None,
     tags: dict | None = None,
@@ -70,6 +101,7 @@ def log_classifier_run(
         params: hyperparamètres / configuration (dict aplati automatiquement).
         mean_metrics: métriques moyennes sur les plis.
         fold_metrics: liste de dicts, un par pli (les clés deviennent `foldK_<métrique>`).
+        histories: courbes par pli ``{"fold", "steps", "metrics"}`` (learning curve).
         artifacts: {chemin local: sous-dossier d'artefacts} pour les fichiers à joindre.
         input_example: exemple d'entrée pour la signature du modèle.
         tags: tags MLflow additionnels.
@@ -108,6 +140,7 @@ def log_classifier_run(
         })
         mlflow.log_params(flat_params)
         mlflow.log_metrics(metrics)
+        _log_histories(histories)
 
         for local_path, artifact_dir in (artifacts or {}).items():
             path = Path(local_path)
@@ -132,25 +165,27 @@ def log_classifier_run(
     return uri, run_id
 
 
-def log_torch_run(
+def log_tensorflow_run(
     *,
     run_name: str,
     model,
     params: dict,
     mean_metrics: dict,
+    fold_metrics: list | None = None,
+    histories: list | None = None,
     artifacts: dict | None = None,
     input_example=None,
     tags: dict | None = None,
     experiment: str = DEFAULT_EXPERIMENT,
     model_artifact: str = "model",
 ) -> tuple[str, str]:
-    """Équivalent de :func:`log_classifier_run` pour un ``torch.nn.Module``.
+    """Équivalent de :func:`log_classifier_run` pour un modèle TensorFlow/Keras.
 
-    Le modèle est sérialisé par ``mlflow.pytorch`` (rechargeable avec
-    ``mlflow.pytorch.load_model``) ; les poids bruts et les métadonnées JSON
-    sont jointes en artefacts pour le service d'inférence.
+    Le modèle est sérialisé par ``mlflow.tensorflow`` (rechargeable avec
+    ``mlflow.tensorflow.load_model``). Les poids ``.keras`` et les métadonnées
+    JSON sont aussi joints en artefacts pour le service d'inférence.
     """
-    import torch
+    import tensorflow as tf
     from mlflow.tracking import MlflowClient
 
     uri = setup_mlflow(experiment)
@@ -159,21 +194,27 @@ def log_torch_run(
     _flatten("", params, flat_params)
     flat_params.update({
         "python": platform.python_version(),
-        "torch": torch.__version__,
+        "tensorflow": tf.__version__,
         "platform": platform.platform()[:250],
     })
     metrics = {str(k): float(v) for k, v in mean_metrics.items()}
+    for row in fold_metrics or []:
+        fold = row.get("fold", "?")
+        for key, value in row.items():
+            if key != "fold" and isinstance(value, (int, float)):
+                metrics[f"fold{fold}_{key}"] = float(value)
 
     with mlflow.start_run(run_name=run_name) as run:
         mlflow.set_tags({
             "project": "tp3_audio_engine",
-            "model_family": type(model).__name__,
+            "model_family": "TensorFlow/Keras",
             "dataset": "ourdataset/train (normal/abnormal)",
             "features": "Mel 128x256 (preprocess.Preprocessor, segments 5 s)",
             **(tags or {}),
         })
         mlflow.log_params(flat_params)
         mlflow.log_metrics(metrics)
+        _log_histories(histories)
 
         for local_path, artifact_dir in (artifacts or {}).items():
             path = Path(local_path)
@@ -182,8 +223,15 @@ def log_torch_run(
             else:
                 print(f"[MLflow] artefact absent, ignoré : {path}")
 
-        model.eval()
-        mlflow.pytorch.log_model(model, artifact_path=model_artifact, input_example=input_example)
+        try:
+            mlflow.tensorflow.log_model(
+                model, artifact_path=model_artifact, input_example=input_example,
+            )
+        except Exception as error:
+            # MLflow 2.16 + Keras 3 : certains environnements ne peuvent pas
+            # sérialiser le modèle dans le format MLflow. Le fichier .keras a
+            # déjà été joint via ``artifacts`` ci-dessus ; le run reste valide.
+            print(f"[MLflow] log_model TensorFlow ignoré ({type(error).__name__}: {error})")
         run_id = run.info.run_id
 
     experiment_id = MlflowClient().get_experiment_by_name(experiment).experiment_id

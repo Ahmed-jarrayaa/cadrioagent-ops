@@ -8,10 +8,11 @@ API REST consommée par l'interface web (via l'api-gateway) :
 - ``POST /predict_all``   SVM + arbre de décision + CNN, avec consensus ;
 - ``POST /predict_one``   un seul modèle (``?family=svm|tree|cnn``).
 
-Les trois modèles du TP3 sont décrits dans ``registry.py`` : chacun est un artefact
-local (``models/best_svm.joblib``, ``best_tree.joblib``, ``best_cnn.pt``) accompagné
-de son JSON de métadonnées. MLflow sert uniquement à retrouver le run associé
-(run_id, métriques) ; l'inférence ne dépend jamais du serveur MLflow.
+Les modèles du TP3 sont décrits dans ``registry.py`` : chacun est un artefact local
+(``models/best_svm.joblib``, ``best_tree.joblib``, ``best_cnn.keras`` ...) accompagné
+de son JSON de métadonnées. MLflow sert à retrouver le run associé (run_id, métriques)
+et à restaurer automatiquement ces fichiers s'ils manquent dans ``models/`` : aucun
+notebook n'a besoin d'être relancé pour servir un modèle déjà entraîné.
 """
 
 import json

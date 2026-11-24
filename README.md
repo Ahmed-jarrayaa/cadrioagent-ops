@@ -44,7 +44,10 @@ Le tout est exposé par une API FastAPI et une interface web, avec suivi des exp
   - **SVM RBF** sur 46 caractéristiques par segment (20 MFCC moyenne + 20 MFCC écart-type,
     ZCR, centroïde spectral, RMS) ;
   - **arbre de décision** sur les mêmes caractéristiques ;
-  - **CNN 2D** sur spectrogrammes **Mel 128 × 256**.
+  - **CNN 2D TensorFlow/Keras** sur spectrogrammes **Mel 128 × 256** réduits à **64 × 128**
+    (pour rester entraînable sur CPU).
+- **Validation croisée 3 folds** au niveau enregistrement pour les trois modèles, avec courbes
+  d'apprentissage et de perte par pli (PNG + CSV) enregistrées dans MLflow.
 - **Agrégation par enregistrement** : moyenne des probabilités par segment, seuil propre à chaque
   modèle, puis **vote majoritaire** pour le consensus (égalité tranchée par la probabilité moyenne).
 - **API REST** : `audio-engine` (inférence) et `api-gateway` (proxy, CORS, orchestration).
@@ -81,7 +84,7 @@ Le tout est exposé par une API FastAPI et une interface web, avec suivi des exp
               │ charge les artefacts locaux
               ▼
   ┌──────────────────────────────────────────────────────────────┐
-  │ best_svm.joblib  ·  best_tree.joblib  ·  best_cnn.pt         │
+  │ best_svm.joblib  ·  best_tree.joblib  ·  best_cnn.keras      │
   │ cardio_model.onnx (endpoint historique /predict)             │
   └──────────────────────────────────────────────────────────────┘
 
@@ -110,7 +113,8 @@ réseau Docker).
 │   ├── registry.py                 # chargement des 3 modèles, prédiction, consensus
 │   ├── server.py                   # API FastAPI de l'audio-engine
 │   ├── analyze_signal.py           # CLI d'analyse d'un WAV
-│   ├── mlflow_utils.py             # helpers MLflow (scikit-learn et PyTorch)
+│   ├── fold_utils.py               # plis 3 folds + courbes d'apprentissage/validation
+│   ├── mlflow_utils.py             # helpers MLflow (scikit-learn et TensorFlow)
 │   ├── SVM.ipynb                   # entraînement du SVM
 │   ├── Decisiontree.ipynb          # entraînement de l'arbre de décision
 │   ├── CNN.ipynb                   # entraînement du CNN (Mel)
@@ -142,7 +146,7 @@ réseau Docker).
 | pip | récent | installation des dépendances |
 | Git | 2.x | clonage |
 | Docker Desktop | optionnel | pile complète (`docker compose`) |
-| GPU NVIDIA | optionnel | accélération Ollama (non requis pour l'inférence) |
+| GPU NVIDIA | optionnel | accélération de l'entraînement CNN (TensorFlow) et d'Ollama (non requis pour l'inférence) |
 
 > **Windows** : les commandes de ce README sont en PowerShell. Sous Linux/macOS, remplacer
 > `.\.venv\Scripts\Activate.ps1` par `source .venv/bin/activate` et `curl.exe` par `curl`.
@@ -182,20 +186,19 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements-train.txt
 ```
 
-Dépendances des services et du CNN :
+Dépendances des services :
 
 ```powershell
 python -m pip install fastapi "uvicorn[standard]" python-multipart httpx
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
-> Sur une machine sans GPU, l'index CPU de PyTorch évite de télécharger les paquets CUDA.
-> Pour un GPU NVIDIA, installer la version CUDA correspondante depuis le site de PyTorch.
+> Le CNN s'entraîne et s'infère avec **TensorFlow/Keras** : aucun paquet PyTorch n'est requis.
+> Pour l'entraînement GPU (NVIDIA), `requirements-train.txt` installe `tensorflow[and-cuda]==2.20.0` sur Linux/WSL2 (bibliothèques CUDA/cuDNN fournies via pip). Sur Windows natif, TensorFlow ≥ 2.11 ne prend pas en charge le GPU NVIDIA : utiliser **WSL2** avec un pilote NVIDIA à jour côté Windows, ou s'entraîner sur CPU.
 
 ### 5.4 Vérifier l'installation
 
 ```powershell
-python -c "import numpy, scipy, sklearn, librosa, mlflow, torch, fastapi; print('OK')"
+python -c "import numpy, scipy, sklearn, librosa, mlflow, tensorflow, fastapi; print('OK')"
 ```
 
 ---
@@ -295,14 +298,15 @@ Interface MLflow : <http://localhost:5000>
 
 | Notebook | Modèle | Run MLflow | Artefacts produits |
 |---|---|---|---|
-| `audio_engine/SVM.ipynb` | SVM RBF, 46 features/segment, `GridSearchCV` + `GroupKFold(3)` | `svm_rbf_segments` | `models/best_svm.joblib` + `best_svm_meta.json` |
-| `audio_engine/Decisiontree.ipynb` | arbre de décision, mêmes features/plis | `decision_tree_gridsearch` | `models/best_tree.joblib` + `best_tree_meta.json` |
-| `audio_engine/CNN.ipynb` | CNN 2D sur Mel 128 × 256 | `cnn_mel_segments` | `models/best_cnn.pt` + `best_cnn_meta.json` |
+| `audio_engine/SVM.ipynb` | SVM RBF, 46 features/segment, `GridSearchCV` + 3 folds enregistrement | `svm_rbf_segments` | `models/best_svm.joblib` + `best_svm_meta.json` + courbes des 3 plis |
+| `audio_engine/Decisiontree.ipynb` | arbre de décision, mêmes features et mêmes plis | `decision_tree_gridsearch` | `models/best_tree.joblib` + `best_tree_meta.json` + courbes des 3 plis |
+| `audio_engine/CNN.ipynb` | CNN 2D TensorFlow/Keras sur Mel 128 × 256 → 64 × 128, 3 folds enregistrement | `cnn_mel_segments` | `models/best_cnn.keras` + `best_cnn_meta.json` + courbes des 3 plis |
 
 Ouvrir les notebooks dans Jupyter ou VS Code, sélectionner l'interpréteur du `.venv`, puis
-exécuter les cellules dans l'ordre.
+exécuter les cellules dans l'ordre. Chaque notebook produit, pour chaque pli, une figure
+d'apprentissage et un CSV d'historique (`models/plots/*_foldK_*`, `models/*_foldK_history.csv`).
 
-> Les artefacts `best_svm.joblib`, `best_tree.joblib` et `best_cnn.pt` sont **déjà présents** dans
+> Les artefacts `best_svm.joblib`, `best_tree.joblib` et `best_cnn.keras` sont **déjà présents** dans
 > le dépôt : l'API peut démarrer sans réentraînement.
 
 ### 7.3 Résultats de référence
@@ -317,7 +321,7 @@ Moyenne des 3 plis pour le SVM et l'arbre, split test pour le CNN :
 
 Détails du CNN (split test, 568 enregistrements / 3 430 segments de 5 s, seuil réglé sur la
 validation avec spécificité ≥ 0,80) : rappel 0,973, spécificité 0,788, **BA au niveau
-enregistrement 0,820**, AUC 0,871. Environ 30 k paramètres, 15 epochs, torch CPU.
+enregistrement 0,820**, AUC 0,871. Environ 421 k paramètres, entraînement TensorFlow/Keras (CPU ou GPU selon la machine).
 
 Les figures (matrices de confusion, courbes ROC/précision-rappel, interprétation de l'arbre) sont
 dans `audio_engine/models/plots/`.
@@ -618,7 +622,7 @@ $env:MAX_UPLOAD_MB = "50"
 |---|---|---|---|---|
 | `svm` | SVM RBF | `models/best_svm.joblib` | `best_svm_meta.json` (≈ 0,099) | sigmoïde du `decision_function`, moyenne |
 | `tree` | arbre de décision | `models/best_tree.joblib` | `best_tree_meta.json` (0,5 par défaut) | `predict_proba`, moyenne |
-| `cnn` | CNN Mel 128 × 256 | `models/best_cnn.pt` | `best_cnn_meta.json` (≈ 0,309) | softmax, moyenne |
+| `cnn` | CNN Mel 128 × 256 → 64 × 128 | `models/best_cnn.keras` | `best_cnn_meta.json` (seuil OOF) | softmax, moyenne |
 
 **Consensus** : chaque modèle vote `normal` ou `abnormal` selon son propre seuil. Le consensus est
 la majorité ; en cas d'égalité, la probabilité moyenne d'anomalie départage.
@@ -641,13 +645,14 @@ compatibilité ; il prend en entrée les 46 caractéristiques par segment et app
 |---|---|
 | `ModuleNotFoundError: registry` | lancer uvicorn depuis `audio_engine/` ou utiliser `--app-dir audio_engine` |
 | `503 Modèle ONNX non chargé` | `models/cardio_model.onnx` ou `cardio_model_meta.json` absent ; les endpoints TP3 restent utilisables |
-| `FileNotFoundError: best_cnn.pt absent` | relancer `CNN.ipynb` pour régénérer l'artefact |
+| `FileNotFoundError: best_cnn.keras absent` | relancer `CNN.ipynb` pour régénérer l'artefact |
 | `[audio-engine] MLflow non chargé` | serveur MLflow arrêté : sans impact sur l'inférence (mode local) |
 | `422 Fichier audio illisible` | WAV corrompu, moins de 1 s ou silencieux |
 | `413 Fichier trop volumineux` | augmenter `MAX_UPLOAD_MB` |
 | MLflow injoignable en local | utiliser `localhost` au lieu de `127.0.0.1` (IPv6), ou `docker compose up -d mlflow-server` |
 | Plantage DLL `matplotlib` + `onnx` sous Windows | exécuter les étapes dans des processus séparés (voir `README_SVM.md`) |
-| `torch` introuvable | `python -m pip install torch --index-url https://download.pytorch.org/whl/cpu` |
+| `tensorflow` introuvable | `python -m pip install -r requirements-train.txt` |
+| GPU non détecté (`GPU : aucun détecté`) | vérifier `nvidia-smi` et le pilote NVIDIA ; sur Linux/WSL2 réinstaller `python -m pip install -r requirements-train.txt` (installe `tensorflow[and-cuda]`) ; sur Windows natif utiliser WSL2 (TensorFlow ≥ 2.11 n'y supporte pas le GPU NVIDIA). Le notebook `CNN.ipynb` affiche le diagnostic CUDA au démarrage. |
 | `libsndfile` manquant (Linux) | `sudo apt-get install libsndfile1` (déjà fait dans l'image Docker) |
 | `docker compose` échoue sur `llm-server` sans GPU | supprimer le bloc `deploy.resources` du service |
 | Port déjà utilisé | `Get-NetTCPConnection -LocalPort 8001` puis arrêter le processus, ou changer de port |
@@ -662,6 +667,7 @@ compatibilité ; il prend en entrée les 46 caractéristiques par segment et app
 | `audio_engine.zip` | archive locale redondante avec `audio_engine/` | — |
 | `CardioAgent-Ops-interface-enrichie.html` | variante d'interface conservée en local | — |
 | `audio_engine/models/tp3_cnn_mels.npy` | **1,38 Go** : dépasse la limite GitHub de 100 Mo | relancer `audio_engine/CNN.ipynb` |
+| `audio_engine/models/tp3_cnn_mels_64x128.npy` | cache Mel réduit (≈ 0,36 Go) | relancer `audio_engine/CNN.ipynb` |
 | `ourdataset/processed/mel_cache_cnn/` | caches Mel jusqu'à 955 Mo | relancer `audio_engine/CNN.ipynb` |
 | `mlruns/`, `mlruns.db`, `mlflow.db` | état local MLflow | relancer les entraînements |
 | `.venv/`, `__pycache__/`, `*.pyc` | environnements et caches | recréer le venv |

@@ -1,0 +1,196 @@
+{
+  "model": "TransferLearning_VGG16",
+  "framework": "TensorFlow/Keras",
+  "backbone": "VGG16",
+  "pretrained": true,
+  "file": "/mnt/c/Users/Admin/Desktop/Semester_1_3GMAM/Data Mining/audio_engine/models/best_tl_vgg16.keras",
+  "created_at": "2026-11-23 21:48:37",
+  "threshold": 0.42546603083610535,
+  "threshold_method": "rappel max sous contrainte spécificité >= 0.80 sur prédictions OOF",
+  "decision": {
+    "kind": "softmax",
+    "aggregation": "moyenne des P(abnormal) des segments du WAV"
+  },
+  "mean_metrics": {
+    "accuracy": 0.8396004700352526,
+    "balanced_accuracy": 0.88470182003293,
+    "macro_precision": 0.7920913885379771,
+    "macro_recall": 0.88470182003293,
+    "macro_f1": 0.8111729486972935,
+    "precision": 0.595754829477701,
+    "recall": 0.9691561590688652,
+    "specificity": 0.8002474809969948,
+    "f1": 0.7379070969647736,
+    "auc": 0.952229200711592,
+    "threshold": 0.42546603083610535,
+    "confusion": {
+      "tn": 13581,
+      "fp": 3390,
+      "fn": 159,
+      "tp": 4996
+    }
+  },
+  "metrics": {
+    "oof_segment": {
+      "accuracy": 0.8396004700352526,
+      "balanced_accuracy": 0.88470182003293,
+      "macro_precision": 0.7920913885379771,
+      "macro_recall": 0.88470182003293,
+      "macro_f1": 0.8111729486972935,
+      "precision": 0.595754829477701,
+      "recall": 0.9691561590688652,
+      "specificity": 0.8002474809969948,
+      "f1": 0.7379070969647736,
+      "auc": 0.952229200711592,
+      "threshold": 0.42546603083610535,
+      "confusion": {
+        "tn": 13581,
+        "fp": 3390,
+        "fn": 159,
+        "tp": 4996
+      }
+    },
+    "oof_recording": {
+      "accuracy": 0.755620206294631,
+      "balanced_accuracy": 0.832135154565061,
+      "macro_precision": 0.7343282421324209,
+      "macro_recall": 0.832135154565061,
+      "macro_f1": 0.7286007796958403,
+      "precision": 0.48036951501154734,
+      "recall": 0.9719626168224299,
+      "specificity": 0.6923076923076923,
+      "f1": 0.642967542503864,
+      "auc": 0.9244292675133798,
+      "threshold": 0.42546603083610535,
+      "confusion": {
+        "tn": 2025,
+        "fp": 900,
+        "fn": 24,
+        "tp": 832
+      }
+    }
+  },
+  "fold_metrics": [
+    {
+      "fold": 1,
+      "backbone": "VGG16",
+      "epochs_run": 9,
+      "best_epoch": 9,
+      "accuracy": 0.8570268074735987,
+      "balanced_accuracy": 0.8906378481911399,
+      "precision": 0.6249039200614912,
+      "recall": 0.9531066822977726,
+      "f1": 0.754874651810585,
+      "macro_precision": 0.8040907560173677,
+      "macro_recall": 0.8906378481911399,
+      "macro_f1": 0.8269786103089622,
+      "roc_auc": 0.9510796608490333,
+      "specificity": 0.828169014084507,
+      "confusion": {
+        "tn": 4704,
+        "fp": 976,
+        "fn": 80,
+        "tp": 1626
+      },
+      "accuracy_at_threshold": 0.8448415922014623,
+      "precision_at_threshold": 0.6018181818181818,
+      "recall_at_threshold": 0.97010550996483,
+      "f1_at_threshold": 0.742818671454219,
+      "specificity_at_threshold": 0.8072183098591549,
+      "auc_at_threshold": 0.9510796608490333
+    },
+    {
+      "fold": 2,
+      "backbone": "VGG16",
+      "epochs_run": 10,
+      "best_epoch": 9,
+      "accuracy": 0.8403126744835288,
+      "balanced_accuracy": 0.88166416286119,
+      "precision": 0.5995534052847041,
+      "recall": 0.9594997022036926,
+      "f1": 0.7379752633989922,
+      "macro_precision": 0.7921823314116172,
+      "macro_recall": 0.88166416286119,
+      "macro_f1": 0.8115694425808453,
+      "roc_auc": 0.9487604126908462,
+      "specificity": 0.8038286235186873,
+      "confusion": {
+        "tn": 4409,
+        "fp": 1076,
+        "fn": 68,
+        "tp": 1611
+      },
+      "accuracy_at_threshold": 0.8267727526521497,
+      "precision_at_threshold": 0.5775495750708215,
+      "recall_at_threshold": 0.9714115544967242,
+      "f1_at_threshold": 0.7244059515878304,
+      "specificity_at_threshold": 0.7824977210574293,
+      "auc_at_threshold": 0.9487604126908462
+    },
+    {
+      "fold": 3,
+      "backbone": "VGG16",
+      "epochs_run": 9,
+      "best_epoch": 9,
+      "accuracy": 0.8581045406546991,
+      "balanced_accuracy": 0.8897502291609498,
+      "precision": 0.6303939962476548,
+      "recall": 0.9491525423728814,
+      "f1": 0.7576099210822999,
+      "macro_precision": 0.8060338948861976,
+      "macro_recall": 0.8897502291609498,
+      "macro_f1": 0.8286509995446023,
+      "roc_auc": 0.9577741514233279,
+      "specificity": 0.8303479159490182,
+      "confusion": {
+        "tn": 4821,
+        "fp": 985,
+        "fn": 90,
+        "tp": 1680
+      },
+      "accuracy_at_threshold": 0.8466209081309398,
+      "precision_at_threshold": 0.6081081081081081,
+      "recall_at_threshold": 0.9661016949152542,
+      "f1_at_threshold": 0.746398952422523,
+      "specificity_at_threshold": 0.8101963486048915,
+      "auc_at_threshold": 0.9577741514233279
+    }
+  ],
+  "mean_std": {
+    "mean": {
+      "accuracy_at_threshold": 0.8394117509948505,
+      "precision_at_threshold": 0.5958252883323705,
+      "recall_at_threshold": 0.9692062531256028,
+      "f1_at_threshold": 0.7378745251548574,
+      "auc_at_threshold": 0.9525380749877358
+    },
+    "std": {
+      "accuracy_at_threshold": 0.008966593579292735,
+      "precision_at_threshold": 0.013175534514064172,
+      "recall_at_threshold": 0.0022590778857614884,
+      "f1_at_threshold": 0.009635229054562044,
+      "auc_at_threshold": 0.003821613998852287
+    }
+  },
+  "best_fold": 3,
+  "protocol": "Stratified 3-Fold Cross-Validation au niveau enregistrement (KFold(3, shuffle=True, random_state=10)), seuil OOF",
+  "img_size": 128,
+  "mel": {
+    "sr": 2000,
+    "n_mels": 128,
+    "n_fft": 512,
+    "hop_length": 128,
+    "target_time_frames": 256,
+    "downsample": 2,
+    "input_shape": [
+      64,
+      128
+    ]
+  },
+  "labels": {
+    "0": "normal",
+    "1": "abnormal"
+  },
+  "n_segments": 22126,
+  "n_recordings": 3781
+}

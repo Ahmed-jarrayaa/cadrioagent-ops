@@ -6,6 +6,10 @@ librosa
 soundfile
 joblib
 matplotlib
+# GPU (Linux/WSL2 + NVIDIA) : tensorflow[and-cuda] installe les bibliothèques CUDA/cuDNN via pip.
+# Sur Windows natif, TensorFlow >= 2.11 ne supporte pas le GPU NVIDIA ; utiliser WSL2 pour l'entraînement GPU.
+tensorflow[and-cuda]==2.20.0; platform_system != "Windows"
+tensorflow==2.20.0; platform_system == "Windows"
 mlflow==2.16.2
 skl2onnx
 onnx

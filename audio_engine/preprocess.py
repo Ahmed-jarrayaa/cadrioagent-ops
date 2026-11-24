@@ -35,6 +35,7 @@ class Preprocessor:
         self.n_mels, self.n_mfcc = int(c["n_mels"]), int(c["n_mfcc"])
         self.min_dur, self.max_seg = float(c["min_duration_s"]), int(c["max_segments"])
         self.sos = butter(4, c["bandpass_hz"], btype="band", fs=self.sr, output="sos")
+        self.bandpass_hz = [float(v) for v in c["bandpass_hz"]]
         self.names = feature_names(self.n_mfcc)
 
     # ---- signal ----
@@ -52,13 +53,20 @@ class Preprocessor:
         y = y / (np.max(np.abs(y)) + 1e-9)
         return y.astype(np.float32)
 
-    def segment(self, y):
+    def segment_positions(self, y):
+        """Indices de début des fenêtres de ``segment`` (pour la visualisation)."""
         if len(y) < self.seg_len:
-            return [np.resize(y, self.seg_len)]
+            return [0]
         starts = np.arange(0, len(y) - self.seg_len + 1, self.hop_len)
         if len(starts) > self.max_seg:        # fenêtres réparties sur tout l'enregistrement
             starts = starts[np.linspace(0, len(starts) - 1, self.max_seg).round().astype(int)]
-        return [y[i:i + self.seg_len] for i in starts]
+        return [int(i) for i in starts]
+
+    def segment(self, y):
+        if len(y) < self.seg_len:
+            return [np.resize(y, self.seg_len)]
+        return [y[i:i + self.seg_len] for i in self.segment_positions(y)]
+
 
     # ---- caractéristiques ----
     def features_1d(self, s):

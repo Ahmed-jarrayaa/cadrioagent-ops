@@ -7,11 +7,13 @@ n_mels: 128
 n_fft: 512
 hop_length: 128
 target_time_frames: 256
+downsample: 2          # 128x256 -> 64x128 (entraînement CPU/GPU selon disponibilité, et inférence)
 
-# Entraînement
-batch_size: 32
-epochs: 40
+# Entraînement (notebook CNN.ipynb, 3 folds au niveau enregistrement)
+batch_size: 128
+epochs: 10
 lr: 0.001
-weight_decay: 0.0001
 dropout: 0.3
-num_workers: 0        # ⚠ Windows : 0 obligatoire pour éviter les erreurs
+early_stopping_patience: 3
+n_splits: 3
+random_state: 10
