@@ -92,8 +92,24 @@ llm_finetuning/
 | `auscultation_cardiaque_normale` | Cours « Auscultation cardiaque normale », Dr F. Touati, Université Salah Boubenider Constantine 3, 2024-2025 | Droits non explicités → **usage académique interne**, pas de redistribution du texte intégral |
 | `esc_evaluation_cardiovasculaire` | Huette P., Abou-Arab O. « Les nouvelles recommandations de la Société européenne de cardiologie… », 2023 | **CC BY-NC 4.0** → usage non commercial avec attribution |
 
-Le registre complet est dans [`data/sources.json`](data/sources.json). Les textes bruts extraits
-(`data/raw/`) ne sont **pas versionnés** : ils peuvent être régénérés localement.
+Le registre complet est dans [`data/sources.json`](data/sources.json), avec l'empreinte SHA-256 de
+chaque PDF et le chemin du texte extrait. Les textes bruts extraits (`data/raw/`) ne sont **pas
+versionnés** : ils peuvent être régénérés localement.
+
+Vérifier la provenance (PDF → empreinte → texte) :
+
+```bash
+python llm_finetuning/data/verify_sources.py
+```
+
+Sortie attendue : `[OK] Provenance des sources vérifiée.` Le script échoue si un PDF a été
+remplacé ou si le texte extrait ne correspond plus au document.
+
+Sur une machine où `data/raw/` n'existe pas encore (clone neuf, Colab), régénérer le texte :
+
+```bash
+python llm_finetuning/data/verify_sources.py --refresh
+```
 
 ### 3.2 Format
 

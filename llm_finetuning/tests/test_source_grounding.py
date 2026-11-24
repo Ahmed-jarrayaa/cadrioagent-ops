@@ -8,6 +8,8 @@ from pathlib import Path
 
 from conftest import DATA_DIR, LLM_DIR, SPLITS
 
+REPO_ROOT = LLM_DIR.parent
+
 RAW_FILES = {
     "auscultation_cardiaque_normale": DATA_DIR / "raw" / "auscultation_cardiaque_normale.txt",
     "esc_evaluation_cardiovasculaire": DATA_DIR / "raw" / "esc_evaluation_cardiovasculaire.txt",
@@ -79,3 +81,15 @@ def test_dataset_card_documents_limits():
 def test_guardrails_have_no_medical_evidence():
     guardrail_files = [Path(DATA_DIR / "seed_guardrails.jsonl")]
     assert guardrail_files[0].exists()
+
+
+def test_pdf_hashes_match_registry(sources):
+    """Les PDF utilisés sont exactement ceux enregistrés dans sources.json."""
+    from llm_finetuning.data.verify_sources import sha256_file
+
+    for source in sources["sources"]:
+        assert source.get("sha256"), source["id"]
+        assert source.get("extracted_text"), source["id"]
+        pdf_path = REPO_ROOT / source["file"]
+        assert pdf_path.exists(), f"PDF absent : {pdf_path}"
+        assert sha256_file(pdf_path) == source["sha256"].lower(), source["id"]

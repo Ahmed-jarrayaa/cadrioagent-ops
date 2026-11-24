@@ -14,7 +14,10 @@
       "url": null,
       "license": "Droits non explicitement précisés — usage académique interne",
       "usage": "Corpus pédagogique interne ; le texte intégral n'est pas redistribué. Toute réutilisation publique nécessite l'accord de l'auteur.",
-      "file": "rag_engine/Auscultation-cardiaque-normale-4-4.pdf"
+      "file": "rag_engine/Auscultation-cardiaque-normale-4-4.pdf",
+      "sha256": "be5ab4ab71defab6fcf43d2ee43ba4ccba46b86d6b3a063deae8f2dca5fa9982",
+      "extracted_text": "llm_finetuning/data/raw/auscultation_cardiaque_normale.txt",
+      "extraction": "pdftotext -layout"
     },
     {
       "id": "esc_evaluation_cardiovasculaire",
@@ -26,7 +29,10 @@
       "doi": "10.1016/j.pratan.2023.06.009",
       "license": "CC BY-NC 4.0",
       "usage": "Usage non commercial avec attribution. Pas de redistribution commerciale.",
-      "file": "rag_engine/S127979602300089X.pdf"
+      "file": "rag_engine/S127979602300089X.pdf",
+      "sha256": "3f8ec92dc8096151cf43b9e42725a29a5356073aded88a509e6825bbe72bec34",
+      "extracted_text": "llm_finetuning/data/raw/esc_evaluation_cardiovasculaire.txt",
+      "extraction": "pdftotext -layout"
     }
   ],
   "guardrails": {

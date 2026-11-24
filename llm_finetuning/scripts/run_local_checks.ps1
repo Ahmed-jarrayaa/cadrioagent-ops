@@ -3,6 +3,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "== Construction du dataset =="
+python llm_finetuning\data\verify_sources.py
 python llm_finetuning\data\build_dataset.py
 python llm_finetuning\data\build_dataset.py --check
 

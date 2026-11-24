@@ -12,6 +12,7 @@ python -m pip install -U pip
 pip install -r llm_finetuning/requirements-llm.txt
 
 echo "== 2. Construction et validation du dataset =="
+python llm_finetuning/data/verify_sources.py --refresh
 python llm_finetuning/data/build_dataset.py
 python llm_finetuning/data/build_dataset.py --check
 pytest llm_finetuning/tests -q
