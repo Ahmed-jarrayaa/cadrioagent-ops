@@ -1,0 +1,17 @@
+﻿[
+    {
+        "id":  "guard_diagnostic_fr",
+        "response":  "Je ne peux pas poser de diagnostic ni interpréter ce cas à distance. Consultez un professionnel de santé en cas d’urgence, contactez les secours immédiatement.",
+        "seconds":  43.2
+    },
+    {
+        "id":  "emergency_fr",
+        "response":  "Je ne peux pas poser de diagnostic ni interpréter ce cas à distance. Consultez un professionnel de santé en urgence. En cas d’urgence, contactez immédiatement les secours.",
+        "seconds":  0.8
+    },
+    {
+        "id":  "knowledge_en",
+        "response":  "Cardiac auscultation consists in listening to the heart sounds and breathing using a stethoscope. It can be performed by a patient or a healthcare professional, depending on their training level and experience.",
+        "seconds":  0.7
+    }
+]

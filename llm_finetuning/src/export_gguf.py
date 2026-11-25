@@ -44,23 +44,34 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def merge_adapter_to_fp16(config: dict, adapter: str, merged_dir: Path) -> Path:
-    """Fusionne l'adaptateur dans le modèle de base (poids fp16)."""
+def merge_adapter_to_fp16(
+    config: dict, adapter: str, merged_dir: Path, device: str = "auto"
+) -> Path:
+    """Fusionne l'adaptateur dans le modèle de base (poids fp16).
+
+    ``device="cpu"`` charge le modèle en float32 le temps de la fusion, puis le
+    repasse en float16 avant sauvegarde. C'est indispensable sur un GPU de 4 Go :
+    la fusion fp16 sur GPU sature la VRAM.
+    """
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model_name = config["model"]["name"]
-    print(f"[export] chargement de {model_name} en fp16 (fusion hors quantification)")
+    dtype = torch.float32 if device == "cpu" else torch.float16
+    print(f"[export] chargement de {model_name} sur {device} ({dtype})")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.float16,
-        device_map="auto",
+        torch_dtype=dtype,
+        device_map=device,
+        low_cpu_mem_usage=True,
         trust_remote_code=bool(config["model"].get("trust_remote_code", False)),
     )
     model = PeftModel.from_pretrained(model, adapter)
     merged = model.merge_and_unload()
+    if device == "cpu":
+        merged = merged.half()
     merged_dir.mkdir(parents=True, exist_ok=True)
     merged.save_pretrained(str(merged_dir), safe_serialization=True)
     tokenizer.save_pretrained(str(merged_dir))
@@ -88,11 +99,21 @@ def export_with_llama_cpp(
         check=True,
     )
 
-    quantize_bin = llama_cpp_dir / "build" / "bin" / "llama-quantize"
-    if not quantize_bin.exists():
-        quantize_bin = llama_cpp_dir / "llama-quantize"
-    if not quantize_bin.exists():
-        raise FileNotFoundError("llama-quantize introuvable. Compiler llama.cpp (voir README).")
+    quantize_bin = None
+    for candidate in (
+        llama_cpp_dir / "llama-quantize.exe",
+        llama_cpp_dir / "llama-quantize",
+        llama_cpp_dir / "build" / "bin" / "llama-quantize.exe",
+        llama_cpp_dir / "build" / "bin" / "llama-quantize",
+    ):
+        if candidate.exists():
+            quantize_bin = candidate
+            break
+    if quantize_bin is None:
+        raise FileNotFoundError(
+            "llama-quantize introuvable. Compiler llama.cpp ou placer le binaire "
+            "précompilé dans le dossier llama.cpp (voir README)."
+        )
 
     final_path = output_dir / f"cardio-llm-{quantization}.gguf"
     print(f"[export] quantification {quantization} : {final_path}")
@@ -171,7 +192,18 @@ def main() -> int:
     parser.add_argument("--quantization", default="q4_k_m", choices=["q4_k_m", "q5_k_m", "q8_0"])
     parser.add_argument("--method", default="llama_cpp", choices=["llama_cpp", "unsloth"])
     parser.add_argument("--llama-cpp-dir", default=str(REPO_ROOT / "llm_finetuning" / "export" / "llama.cpp"))
+    parser.add_argument(
+        "--merge-device",
+        default="auto",
+        choices=["auto", "cpu", "cuda"],
+        help="Périphérique de fusion de l'adaptateur (cpu conseillé sur GPU 4 Go).",
+    )
     parser.add_argument("--merge-only", action="store_true")
+    parser.add_argument(
+        "--keep-merged",
+        action="store_true",
+        help="Conserver le modèle HF fusionné (3 Go pour un 1.5B).",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -180,13 +212,13 @@ def main() -> int:
     merged_dir = output_dir / "merged"
 
     if args.merge_only:
-        merge_adapter_to_fp16(config, args.adapter, merged_dir)
+        merge_adapter_to_fp16(config, args.adapter, merged_dir, args.merge_device)
         return 0
 
     if args.method == "unsloth":
         gguf_path = export_with_unsloth(config, args.adapter, output_dir, args.quantization)
     else:
-        merge_adapter_to_fp16(config, args.adapter, merged_dir)
+        merge_adapter_to_fp16(config, args.adapter, merged_dir, args.merge_device)
         gguf_path = export_with_llama_cpp(
             merged_dir, output_dir, args.quantization, Path(args.llama_cpp_dir)
         )
@@ -206,6 +238,9 @@ def main() -> int:
         if f16_path.exists() and f16_path != gguf_path:
             f16_path.unlink()
             print(f"[export] f16 intermédiaire supprimé : {f16_path}")
+        if not args.keep_merged and merged_dir.exists():
+            shutil.rmtree(merged_dir)
+            print(f"[export] modèle HF fusionné supprimé : {merged_dir}")
 
     print(f"[export] terminé : {gguf_path}")
     return 0

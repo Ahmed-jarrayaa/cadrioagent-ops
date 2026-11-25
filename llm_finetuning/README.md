@@ -1,8 +1,11 @@
 # LLM Fine-Tuning — CardioAgent-Ops
 
-Adaptation **QLoRA 4-bit** d'un modèle open source (Qwen2.5-7B-Instruct) sur un corpus
-pédagogique de cardiologie, avec suivi **MLflow**, évaluation indépendante et export **GGUF**
-pour **Ollama**.
+Adaptation **QLoRA 4-bit** d'un modèle open source sur un corpus pédagogique de cardiologie,
+avec suivi **MLflow**, évaluation indépendante et export **GGUF** pour **Ollama**.
+
+**Modèle livré et réellement entraîné : Qwen2.5-1.5B-Instruct**, sur la machine locale
+(RTX 2050, 4 Go). Le **7B** est la configuration cible, fournie et prête, mais non exécutée :
+elle nécessite un GPU ≥ 12 Go (par exemple Colab T4). Cette décision est documentée en §1 et §5.4.
 
 > ⚠️ **Avertissement** : ce module est un travail **académique**. Le modèle obtenu n'est **pas un
 > dispositif médical**, ne pose pas de diagnostic et ne doit jamais servir à une décision
@@ -14,9 +17,10 @@ pour **Ollama**.
 
 | Élément | Décision |
 |---|---|
-| Modèle principal | **Qwen2.5-7B-Instruct** (QLoRA 4-bit) |
-| Exécution d'entraînement | **Google Colab** GPU T4 16 Go ou L4 24 Go |
-| Fallback | **Qwen2.5-1.5B-Instruct** (smoke test / très petites ressources) |
+| Modèle livré | **Qwen2.5-1.5B-Instruct** (QLoRA 4-bit, entraîné en local) |
+| Configuration cible | **Qwen2.5-7B-Instruct** (prête, non exécutée : GPU ≥ 12 Go requis) |
+| Exécution d'entraînement | Locale (1.5B, RTX 2050 4 Go) ; Colab T4/L4 prévu pour le 7B |
+| Repli | Le 1.5B sert à la fois de repli et de modèle de démonstration livré |
 | Langues | français + anglais |
 | Sources | **uniquement les 2 PDF fournis** dans `rag_engine/` |
 | Volume | **450 train / 70 validation / 70 test** |
@@ -33,8 +37,10 @@ L'audit de la machine locale a relevé :
   stack d'entraînement ;
 - Windows natif → support limité de `bitsandbytes`/Unsloth.
 
-Le code local sert donc à : construire/valider le dataset, lancer les tests, documenter et
-préparer l'export. L'entraînement réel se fait sur Colab.
+Le 7B reste donc sur Colab **si un GPU adapté est disponible**. En l'absence de Colab, tout le
+pipeline a été validé sur le 1.5B local : dataset, entraînement réel (112 pas, 38 min),
+évaluation indépendante, export GGUF `q4_k_m`, test Ollama et service Docker `llm-server`.
+Le 7B n'est pas nécessaire pour démontrer le pipeline, mais il demeure la cible de qualité.
 
 ---
 
@@ -182,7 +188,7 @@ Voir [`data/dataset/dataset_card.md`](data/dataset/dataset_card.md).
 
 ## 4. Installation
 
-### 4.1 Google Colab (recommandé)
+### 4.1 Google Colab (optionnel, pour le 7B)
 
 ```bash
 pip install -U pip
@@ -198,7 +204,7 @@ pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
 En cas d'incompatibilité, le code bascule automatiquement sur **Transformers + PEFT +
 bitsandbytes** (voir `src/model.py`).
 
-### 4.2 Local (validation seulement)
+### 4.2 Local (modèle livré 1.5B)
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -207,7 +213,8 @@ python llm_finetuning/data/build_dataset.py --check
 pytest llm_finetuning/tests -q
 ```
 
-> Ne pas installer toute la stack d'entraînement sur la machine locale : le disque est limité.
+> La stack locale ci-dessous suffit au 1.5B livré. Ne pas installer le 7B sur cette machine :
+> le disque et la VRAM sont limités (voir §1 et §5.4).
 
 ### 4.3 Notebook portable
 
@@ -217,7 +224,8 @@ pytest llm_finetuning/tests -q
 - la configuration est choisie selon la VRAM : **7B si ≥ 12 Go**, **1.5B local sinon** ;
 - les dépendances installées dépendent de l'OS : `requirements-llm.txt` (Linux/Colab) ou
   `requirements-llm-local.txt` (Windows) ;
-- l'export GGUF est sauté sur Windows (nécessite `cmake` + llama.cpp sur Colab/Linux).
+- l'export GGUF fonctionne aussi sur Windows avec les binaires llama.cpp précompilés (§8.1),
+  sans installer `cmake`.
 
 Les sorties d'exécution ne sont pas versionnées, et les chemins sont relatifs au dépôt.
 
@@ -313,8 +321,9 @@ descendre `max_seq_length` à 256, puis `gradient_accumulation_steps` à 16. Le 
 cache CUDA après chaque évaluation et tous les 25 pas (`ReleaseCudaCallback`), et n'accumule pas les
 logits en éval (`prediction_loss_only: true`).
 
-> L'export GGUF local demande ~6 Go de plus (fusion fp16 + GGUF f16). Sur 15 Go libres, il est
-> préférable de l'exécuter sur Colab, ou de supprimer les intermédiaires au fur et à mesure.
+> L'export GGUF local demande ~7 Go au pic (fusion fp16 + GGUF f16). Il a été réalisé avec
+> succès avec ~9,6 Go libres : `--merge-device cpu` charge le base en fp32 pour la fusion, puis
+> repasse en fp16, et les intermédiaires sont supprimés automatiquement après quantification.
 
 > ⚠️ Cette installation modifie le `.venv` partagé : elle remplace `torch` par un build CUDA et
 > change les versions de `transformers`/`numpy`, ce qui peut impacter la partie audio. Pour éviter
@@ -384,71 +393,88 @@ Résultats conservés dans le dépôt (les poids et sorties brutes sont ignorés
 | 1.5B local, 2 époques (38 min) | `llm_finetuning/reports/local_1_5b_evaluation.md` + `metrics_local_1_5b.json` |
 
 Le rapport local documente une progression de F1/ROUGE-L/BLEU **mais un guardrail en échec
-sur 4** (cas `guard_fr_02`), avec n=4 : signal à confirmer sur le 7B, pas une conclusion.
+sur 4** (cas `guard_fr_02`), avec n=4 : signal à ne pas surinterpréter. Le 7B n'ayant pas été
+exécuté, la mitigation retenue est une **défense en profondeur** : prompt système renforcé du
+`Modelfile` + vérification automatique des refus dans `scripts/ollama_smoke_test.ps1`.
 
 ---
 
 ## 8. Export GGUF et intégration Ollama
 
-### 8.1 Export (Colab/Linux)
+### 8.1 Export (local Windows, sans `cmake`)
 
-Méthode `llama.cpp` (recommandée) :
+Le modèle livré a été exporté sur Windows avec les binaires llama.cpp **précompilés** :
+aucun Visual Studio ni `cmake` n'est nécessaire.
 
-```bash
-git clone https://github.com/ggerganov/llama.cpp llm_finetuning/export/llama.cpp
-cd llm_finetuning/export/llama.cpp
-cmake -B build && cmake --build build --config Release -j
-cd -
+```powershell
+# 1) sources llama.cpp (convert_hf_to_gguf.py) + binaire précompilé llama-quantize.exe
+git clone --depth 1 --branch b12728 https://github.com/ggml-org/llama.cpp.git `
+  llm_finetuning\export\llama.cpp
+# Télécharger llama-b12728-bin-win-cpu-x64.zip depuis les releases GitHub et
+# extraire son contenu dans llm_finetuning\export\llama.cpp
 
-python -m llm_finetuning.src.export_gguf \
-  --config llm_finetuning/configs/qlora_qwen25_7b.yaml \
-  --adapter llm_finetuning/outputs/qwen25-7b-cardio/adapter \
-  --output-dir llm_finetuning/export \
-  --quantization q4_k_m
+# 2) dépendance Python du convertisseur
+.\.venv\Scripts\python.exe -m pip install --no-cache-dir "gguf>=0.10"
+
+# 3) fusion CPU (indispensable sur 4 Go de VRAM) + conversion + quantification
+.\.venv\Scripts\python.exe -m llm_finetuning.src.export_gguf `
+  --config llm_finetuning\configs\qlora_qwen25_1_5b_local.yaml `
+  --adapter llm_finetuning\outputs\qwen25-1.5b-local\adapter `
+  --output-dir llm_finetuning\export `
+  --quantization q4_k_m --merge-device cpu
 ```
 
-Méthode Unsloth :
-
-```bash
-python -m llm_finetuning.src.export_gguf \
-  --config llm_finetuning/configs/qlora_qwen25_7b.yaml \
-  --adapter llm_finetuning/outputs/qwen25-7b-cardio/adapter \
-  --output-dir llm_finetuning/export \
-  --method unsloth --quantization q4_k_m
-```
+Sur Colab/Linux, garder `--merge-device auto` et utiliser la config 7B. La méthode Unsloth
+reste disponible avec `--method unsloth` si l'adaptateur a été entraîné par Unsloth.
 
 Sorties :
 
 ```text
 llm_finetuning/export/
-├── cardio-llm-q4_k_m.gguf   # non versionné (*.gguf)
-├── Modelfile                # généré depuis le template
+├── cardio-llm-q4_k_m.gguf   # 940,4 Mo, non versionné (*.gguf)
+├── Modelfile                # généré depuis le template, garde-fous renforcés
 └── MANIFEST.json            # taille, SHA-256, quantification
 ```
 
-### 8.2 Ollama
+SHA-256 du GGUF livré :
+`e8d53970f45d67b3ccc612d8777af23854d0a25abba85e70e11711fc0bf0dfcd`.
 
-```bash
-ollama create cardio-llm -f llm_finetuning/export/Modelfile
-ollama run cardio-llm
-```
-
-Test rapide (PowerShell) :
+### 8.2 Ollama et service Docker
 
 ```powershell
+ollama create cardio-llm -f llm_finetuning\export\Modelfile
 .\llm_finetuning\scripts\ollama_smoke_test.ps1
 ```
+
+Le script de smoke test utilise l'API HTTP d'Ollama (plus fiable que `ollama run` sous Windows),
+crée le modèle, envoie 5 prompts et **échoue si un refus de diagnostic ou une redirection en
+urgence manque**. Rapport : `llm_finetuning/reports/ollama_smoke_1_5b.json`.
 
 Le `Modelfile` applique :
 
 - un template ChatML ;
 - `temperature 0.25`, `top_p 0.9`, `num_ctx 4096` ;
-- un **SYSTEM prompt** avec les garde-fous (pas de diagnostic, pas de prescription,
-  redirection en urgence, langues FR/EN).
+- un **SYSTEM prompt** renforcé : pas de diagnostic, pas de prescription, refus explicite
+  et redirection en urgence, langues FR/EN.
 
-> **Docker** : l'intégration au service `llm-server` sera faite **après validation du
-> fine-tuning**. Le `docker-compose.yml` monte déjà `./llm_finetuning/export:/models:ro` et
-> l'entrypoint cherche `Modelfile` + `cardio-llm.gguf` ; ces fichiers ne sont pas encore fournis.
+Résultat mesuré : **3/3 garde-fous respectés** en local (FR et EN) et dans le conteneur Docker.
+Les réponses factuelles détaillées restent à valider via le RAG : le 1.5B peut encore produire
+une affirmation inexacte (ex. description erronée de B1). Le LLM ne doit pas être la source
+unique d'un fait médical.
+
+**Docker** : le service `llm-server` est maintenant intégré et vérifié. Le compose monte
+`./llm_finetuning/export:/models:ro` ; l'entrypoint crée `cardio-llm` depuis `/models/Modelfile`
+au démarrage du conteneur.
+
+```powershell
+docker compose up -d --force-recreate llm-server
+docker logs -f llm-server
+```
+
+Rapport du test via le service : `llm_finetuning/reports/docker_llm_server_smoke_1_5b.json`.
+
+> ⚠️ Ollama local et `llm-server` utilisent tous deux le port `11434` : arrêter l'un avant de
+> démarrer l'autre.
 
 ### 8.3 Ressources locales
 
@@ -503,8 +529,8 @@ Aucun test ne nécessite de GPU ni de téléchargement de modèle.
 - **Données** : aucun patient, aucune donnée personnelle ; ne pas soumettre de données
   identifiantes au modèle.
 - **Licences** :
-  - Qwen2.5-7B-Instruct : vérifier la licence sur la model card (Apache-2.0 pour cette taille
-    au moment de la rédaction) ;
+  - Qwen2.5-1.5B-Instruct / 7B-Instruct : vérifier la licence sur la model card (Apache-2.0
+    pour ces tailles au moment de la rédaction) ;
   - article ESC : CC BY-NC 4.0, usage non commercial avec attribution ;
   - cours d'auscultation : droits non explicités, usage académique interne.
 - **Reproductibilité** : versions des libs, paramètres et empreintes de dataset sont journalisés
@@ -514,7 +540,15 @@ Aucun test ne nécessite de GPU ni de téléchargement de modèle.
 
 ## 12. Suite du projet
 
-1. Valider le fine-tuning (pertes, évaluation, revue d'exemples).
-2. Exporter le GGUF et créer le modèle Ollama `cardio-llm`.
-3. **Ensuite seulement** : brancher `llm-server` (Docker), le RAG (`vector-db`) et
-   l'orchestrateur multi-agents.
+Étapes réalisées pour le 1.5B livré :
+
+1. ✅ Entraînement QLoRA (112 pas, `eval_loss` 1,148) et évaluation 70 exemples.
+2. ✅ Export GGUF `q4_k_m` (SHA-256 vérifié) et modèle Ollama `cardio-llm`.
+3. ✅ Smoke test des garde-fous en local et dans `llm-server` (Docker).
+4. ✅ Documentation des limites et des mesures dans `llm_finetuning/reports/`.
+
+Reste à faire si un GPU ≥ 12 Go devient disponible :
+
+1. exécuter `qlora_qwen25_7b.yaml` sur Colab, puis reproduire §7 et §8 ;
+2. comparer les métriques du 7B à celles du 1.5B (§7) ;
+3. relier le RAG (`vector-db`) et l'orchestrateur multi-agents au `llm-server` validé.

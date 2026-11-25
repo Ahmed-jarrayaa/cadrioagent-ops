@@ -50,6 +50,7 @@ llm_finetuning/outputs/
 llm_finetuning/export/*.gguf
 llm_finetuning/export/merged/
 llm_finetuning/export/llama.cpp/
+llm_finetuning/export/*.log
 # Base MLflow locale
 llm_finetuning/mlruns.db
 # Environnement virtuel dédié au LLM local
