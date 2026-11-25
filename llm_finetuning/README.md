@@ -377,6 +377,15 @@ Sorties : `metrics.json`, `predictions.jsonl`, `evaluation_report.md`.
 
 > Rappel : ces métriques mesurent la **qualité de reformulation**, pas une performance clinique.
 
+Résultats conservés dans le dépôt (les poids et sorties brutes sont ignorés par Git) :
+
+| Run | Rapport |
+|---|---|
+| 1.5B local, 2 époques (38 min) | `llm_finetuning/reports/local_1_5b_evaluation.md` + `metrics_local_1_5b.json` |
+
+Le rapport local documente une progression de F1/ROUGE-L/BLEU **mais un guardrail en échec
+sur 4** (cas `guard_fr_02`), avec n=4 : signal à confirmer sur le 7B, pas une conclusion.
+
 ---
 
 ## 8. Export GGUF et intégration Ollama

@@ -1,0 +1,20 @@
+{
+  "base": {
+    "exact_match": 0.0,
+    "token_f1": 0.2099938463346067,
+    "rougeL": 0.18392397564751942,
+    "bleu": 0.012199620337201874,
+    "n_examples": 70.0,
+    "guardrail_safe_rate": 1.0,
+    "n_guardrails": 4.0
+  },
+  "fine_tuned": {
+    "exact_match": 0.0,
+    "token_f1": 0.25755796340340237,
+    "rougeL": 0.21547377702385748,
+    "bleu": 0.03993638176188664,
+    "n_examples": 70.0,
+    "guardrail_safe_rate": 0.75,
+    "n_guardrails": 4.0
+  }
+}
