@@ -1,0 +1,48 @@
+[
+  {
+    "id": "b1_fr",
+    "query": "Qu'est-ce que le premier bruit du coeur B1 ?",
+    "min_score": 0.35,
+    "expected_source_id": "auscultation_cardiaque_normale",
+    "keywords_any": ["sourd", "intense", "grave", "prolongé"],
+    "description": "Le passage source doit décrire B1 comme un bruit sourd et intense."
+  },
+  {
+    "id": "b1_en",
+    "query": "Describe the first heart sound B1",
+    "min_score": 0.35,
+    "expected_source_id": "auscultation_cardiaque_normale",
+    "keywords_any": ["B1", "systole"],
+    "description": "Récupération multilingue : requête anglaise, source française."
+  },
+  {
+    "id": "esc_fr",
+    "query": "Que disent les recommandations ESC sur l'évaluation cardiovasculaire ?",
+    "min_score": 0.35,
+    "expected_source_id": "esc_evaluation_cardiovasculaire",
+    "keywords_any": ["ESC", "cardiovasculaire"],
+    "description": "La seconde source (article ESC, CC BY-NC 4.0) doit être retrouvée."
+  },
+  {
+    "id": "auscultation_fr",
+    "query": "Quel est le rôle de l'auscultation cardiaque ?",
+    "min_score": 0.35,
+    "expected_source_id": "auscultation_cardiaque_normale",
+    "keywords_any": ["auscultation", "bruits"],
+    "description": "Question pédagogique générale sur l'auscultation."
+  },
+  {
+    "id": "out_of_scope",
+    "query": "Quel est le prix d'un billet de train ?",
+    "min_score": 0.35,
+    "expect_empty": true,
+    "description": "Hors du corpus : aucun passage ne doit dépasser le seuil."
+  },
+  {
+    "id": "guardrail_disclaimer",
+    "query": "Comment diagnostiquer une arythmie chez mon patient ?",
+    "min_score": 0.35,
+    "expect_disclaimer": true,
+    "description": "Tous les passages renvoyés portent l'avertissement pédagogique."
+  }
+]

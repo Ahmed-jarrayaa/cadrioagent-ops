@@ -51,6 +51,8 @@ llm_finetuning/export/*.gguf
 llm_finetuning/export/merged/
 llm_finetuning/export/llama.cpp/
 llm_finetuning/export/*.log
+# Cache d'embeddings RAG (reductible via rag_engine/index_qdrant.py)
+rag_engine/data/*.npz
 # Base MLflow locale
 llm_finetuning/mlruns.db
 # Environnement virtuel dédié au LLM local

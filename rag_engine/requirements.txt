@@ -1,0 +1,7 @@
+# Pipeline RAG — extraction, embeddings, indexation et rappel
+pypdf>=4.0
+numpy>=1.26
+sentence-transformers==3.4.1
+transformers==4.46.3
+tokenizers==0.20.3
+qdrant-client>=1.12

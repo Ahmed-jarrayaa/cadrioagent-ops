@@ -1,0 +1,82 @@
+{
+  "collection": "cardio_docs",
+  "model": "BAAI/bge-m3",
+  "url": "http://127.0.0.1:6333",
+  "top_k": 3,
+  "passed": 6,
+  "total": 6,
+  "details": [
+    {
+      "id": "b1_fr",
+      "query": "Qu'est-ce que le premier bruit du coeur B1 ?",
+      "description": "Le passage source doit décrire B1 comme un bruit sourd et intense.",
+      "status": "PASS",
+      "failures": [],
+      "top_score": 0.6314,
+      "top_source_id": "auscultation_cardiaque_normale",
+      "top_page": 5,
+      "n_passages": 3,
+      "snippet": "* Début de systole : la contraction des ventricules suivie d’une augmentation de la pression intraventriculaire (> pression intra-auriculaire) entraînant la fermeture des valves mitrales et tricuspides correspondant au 1"
+    },
+    {
+      "id": "b1_en",
+      "query": "Describe the first heart sound B1",
+      "description": "Récupération multilingue : requête anglaise, source française.",
+      "status": "PASS",
+      "failures": [],
+      "top_score": 0.6264,
+      "top_source_id": "auscultation_cardiaque_normale",
+      "top_page": 5,
+      "n_passages": 3,
+      "snippet": "* Début de systole : la contraction des ventricules suivie d’une augmentation de la pression intraventriculaire (> pression intra-auriculaire) entraînant la fermeture des valves mitrales et tricuspides correspondant au 1"
+    },
+    {
+      "id": "esc_fr",
+      "query": "Que disent les recommandations ESC sur l'évaluation cardiovasculaire ?",
+      "description": "La seconde source (article ESC, CC BY-NC 4.0) doit être retrouvée.",
+      "status": "PASS",
+      "failures": [],
+      "top_score": 0.6508,
+      "top_source_id": "esc_evaluation_cardiovasculaire",
+      "top_page": 13,
+      "n_passages": 3,
+      "snippet": "12 cardiac surgery Developed by the task force for cardiovascular assessment and management of patients undergoing non-cardiac surgery of the European Society of Cardiology (ESC) Endorsed by the European Society of Anaes"
+    },
+    {
+      "id": "auscultation_fr",
+      "query": "Quel est le rôle de l'auscultation cardiaque ?",
+      "description": "Question pédagogique générale sur l'auscultation.",
+      "status": "PASS",
+      "failures": [],
+      "top_score": 0.7152,
+      "top_source_id": "auscultation_cardiaque_normale",
+      "top_page": 3,
+      "n_passages": 3,
+      "snippet": "I/Introduction : L’auscultation permet d’écouter les bruits du cœur c’est un temps essentiel de l’examen physique cardiaque qui peut-être difficile. D’où l’Intérêt d’un entrainement pour bien connaitre une auscultation n"
+    },
+    {
+      "id": "out_of_scope",
+      "query": "Quel est le prix d'un billet de train ?",
+      "description": "Hors du corpus : aucun passage ne doit dépasser le seuil.",
+      "status": "PASS",
+      "failures": [],
+      "top_score": null,
+      "top_source_id": null,
+      "top_page": null,
+      "n_passages": 0,
+      "snippet": ""
+    },
+    {
+      "id": "guardrail_disclaimer",
+      "query": "Comment diagnostiquer une arythmie chez mon patient ?",
+      "description": "Tous les passages renvoyés portent l'avertissement pédagogique.",
+      "status": "PASS",
+      "failures": [],
+      "top_score": 0.6171,
+      "top_source_id": "auscultation_cardiaque_normale",
+      "top_page": 3,
+      "n_passages": 3,
+      "snippet": "calme puis apnée - Examinateur : Explique au patient le déroulement de l’examen Il se place à la droite du patient ; prend simultanément le pouls de la main gauche pour repérer la systole et situer chronologiquement les "
+    }
+  ]
+}

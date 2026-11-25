@@ -89,8 +89,8 @@ Le tout est exposé par une API FastAPI et une interface web, avec suivi des exp
   └──────────────────────────────────────────────────────────────┘
 
   MLflow :5000  ← traçage des entraînements (optionnel à l'inférence)
-  Qdrant :6333  ← base vectorielle (RAG, prévue)
-  Ollama :11434 ← LLM local (prévu)
+  Qdrant :6333  ← base vectorielle (RAG, 66 passages indexés)
+  Ollama :11434 ← LLM local cardio-llm (Qwen2.5-1.5B fine-tuné)
 ```
 
 En local, l'interface peut appeler **directement** `audio-engine` sur `localhost:8001`.
@@ -124,10 +124,10 @@ réseau Docker).
 ├── dataset/dataset/                # jeux de données bruts (PhysioNet Challenge 2016, PASCAL)
 ├── docker/                         # Dockerfiles des services
 ├── docker-compose.yml              # pile complète
-├── llm_finetuning/                 # emplacement des exports LLM (poids .gguf non versionnés)
+├── llm_finetuning/                 # dataset, QLoRA, rapports et export GGUF (poids non versionné)
 ├── ourdataset/                     # dataset du projet (normal/abnormal, plis, features)
-├── rag_engine/                     # base du moteur RAG (à compléter)
-├── tests/                          # emplacement des tests
+├── rag_engine/                     # pipeline RAG : chunk.py, embed.py, index_qdrant.py, retrieve.py
+├── tests/                          # tests (dont test_rag.py)
 ├── web/index.html                  # interface web (fichier unique)
 ├── 01_eda_data_wrangling.ipynb     # analyse exploratoire et construction du dataset
 ├── import_signals.py               # import des WAV dans PostgreSQL
@@ -394,8 +394,8 @@ docker compose ps
 |---|---|---|
 | `api-gateway` | **8085** | point d'entrée HTTP public (proxy) |
 | `mlflow-server` | **5000** | suivi des expériences |
-| `vector-db` (Qdrant) | **6333** | base vectorielle (RAG) |
-| `llm-server` (Ollama) | **11434** | LLM local |
+| `vector-db` (Qdrant) | **6333** | base vectorielle RAG (collection `cardio_docs`) |
+| `llm-server` (Ollama) | **11434** | LLM local `cardio-llm` (1.5B) |
 | `audio-engine` | interne `8001` | inférence SVM / arbre / CNN / ONNX |
 | `agent-orchestrator` | interne `8002` | orchestrateur d'agents (stub) |
 
@@ -418,13 +418,38 @@ docker compose down -v                   # arrêt + suppression des volumes
 
 - **Sans GPU NVIDIA** : supprimer le bloc `deploy.resources` du service `llm-server` dans
   `docker-compose.yml`, sinon `docker compose up` peut échouer.
-- Le service `llm-server` attend un `Modelfile` et un poids `.gguf` dans
-  `llm_finetuning/export/` (non versionnés). Sans eux, Ollama démarre mais le modèle
-  `cardio-llm` n'est pas créé ; cela ne bloque pas l'inférence audio.
+- Le service `llm-server` crée `cardio-llm` depuis `llm_finetuning/export/Modelfile` et le
+  GGUF local (non versionné, 940 Mo). Vérifié : `/api/tags` expose bien `cardio-llm:latest`.
 - `agent-orchestrator` est un **stub** : `POST /analyze` renvoie simplement la charge reçue.
+  Le pipeline RAG est prêt à être branché (§9.4).
 - Les modèles sont montés en lecture seule depuis `./audio_engine/models`.
 - L'audio-engine n'expose pas de port hôte : passer par la gateway (`8085`). Pour l'exposer
   directement, ajouter `ports: ["8001:8001"]` au service.
+
+### 9.4 Pipeline RAG (vector-db)
+
+Le moteur `rag_engine/` indexe **uniquement les deux PDF du projet** (déclarés dans
+`llm_finetuning/data/sources.json`) dans la collection Qdrant `cardio_docs`. Il fournit les
+faits au LLM, qui ne doit que reformuler.
+
+```powershell
+# 1) dépendances (dans .venv)
+.\.venv\Scripts\python.exe -m pip install -r rag_engine\requirements.txt
+
+# 2) extraction + embeddings + indexation (Qdrant déjà démarré)
+.\.venv\Scripts\python.exe -m rag_engine.index_qdrant --recreate
+
+# 3) évaluation du rappel (6 questions, rapport JSON)
+.\.venv\Scripts\python.exe -m rag_engine.evaluate
+
+# 4) recherche manuelle
+.\.venv\Scripts\python.exe -m rag_engine.retrieve "Qu'est-ce que B1 ?" --top-k 3
+```
+
+Résultat mesuré : **66 passages**, embeddings `BAAI/bge-m3` (1024 dims, cosinus),
+**6/6 questions validées** (`rag_engine/reports/rag_evaluation.json`), dont le rejet d'une
+question hors corpus. Les IDs de passages sont stables (SHA-256) : l'indexation est idempotente.
+Détails et licences : `rag_engine/README.md`.
 
 ---
 
