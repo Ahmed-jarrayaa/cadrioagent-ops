@@ -791,3 +791,42 @@ aucune garantie.
 
 **Ce logiciel n'est pas un dispositif médical et ne doit pas être utilisé pour poser un diagnostic
 ou orienter une prise en charge clinique.**
+
+---
+
+## 18. Tests continus (Jalon 6)
+
+### Lancer la suite
+
+```powershell
+python -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Résultat attendu : **117 tests passed**. `pytest.ini` limite la collecte à `tests/` et
+`llm_finetuning/tests/` afin d'exclure les tests vendorisés de `llama.cpp`.
+
+### Couverture
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q --cov --cov-report=term-missing `
+  --cov-report=xml:reports/coverage.xml --cov-report=html:reports/htmlcov
+```
+
+Le rapport textuel versionné est `reports/coverage.txt` : **51 % de couverture globale**, avec
+**83 à 100 % sur les services applicatifs** (`agents/`, `api-gateway/main.py`,
+`rag_engine/evaluate.py`, `audio_engine/preprocess.py`). Le pourcentage global est plus faible
+parce que la mesure inclut les utilitaires d'entraînement (`registry.py`, `fold_utils.py`,
+`mlflow_utils.py`, `src/dataset.py`) qui ne sont pas censés être exécutés par les tests de service.
+
+| Fichier de test | Périmètre |
+|---|---|
+| `tests/test_agents.py` | graphe LangGraph, garde-fous FR/EN, abstention, audit, refus sans LLM |
+| `tests/test_rag.py` | chunking, embeddings, Qdrant mémoire, évaluation `evaluate.py` |
+| `tests/test_audio.py` | prétraitement sur signaux synthétiques + API REST avec faux ONNX |
+| `tests/test_api.py` | proxys de l'api-gateway avec `httpx` factice, sans conteneur |
+
+Aucun test ne charge de poids volumineux, n'appelle un service distant ni ne modifie les
+notebooks, le modèle ONNX ou `audio_engine/`. Une correction de sécurité a été ajoutée au
+classifieur d'intention : les formulations anglaises « *Please diagnose* / *Can you diagnose* »
+sont désormais refusées déterminístiquement.

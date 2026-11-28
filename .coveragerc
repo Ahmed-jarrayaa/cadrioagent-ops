@@ -1,0 +1,24 @@
+[run]
+branch = True
+source =
+    agents
+    rag_engine
+    audio_engine
+    api-gateway
+omit =
+    */__pycache__/*
+    */tests/*
+    audio_engine/mlruns/*
+    audio_engine/runs/*
+    audio_engine/notebooks/*
+    llm_finetuning/*
+    mlruns/*
+    .venv/*
+
+[report]
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError

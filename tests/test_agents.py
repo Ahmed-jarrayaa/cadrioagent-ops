@@ -13,7 +13,16 @@ from pydantic import ValidationError
 from agents.config import Settings
 from agents.main import create_app
 from agents.nodes import classify_intent, detect_language
-from agents.prompts import EMERGENCY_FR, PRESCRIPTION_FR, REFUSAL_FR
+from agents.prompts import (
+    ABSTENTION_EN,
+    EMERGENCY_EN,
+    EMERGENCY_FR,
+    PRESCRIPTION_EN,
+    PRESCRIPTION_FR,
+    REFUSAL_EN,
+    REFUSAL_FR,
+    SERVICE_UNAVAILABLE_FR,
+)
 from agents.schemas import AnalyzeRequest
 from agents.service import Orchestrator
 
@@ -58,6 +67,26 @@ class FakeLLM:
     def generate(self, prompt, system):
         self.calls.append({"prompt": prompt, "system": system})
         return self.reply
+
+    def health(self):
+        return {"status": "ok", "model": "fake", "model_available": True}
+
+
+class BrokenRetriever:
+    """Qdrant indisponible : retrieve et health échouent."""
+
+    def retrieve(self, query, top_k):
+        raise ConnectionError("Qdrant arrêté")
+
+    def health(self):
+        raise ConnectionError("Qdrant arrêté")
+
+
+class FailingLLM:
+    """LLM indisponible : la réponse doit basculer en extraction source."""
+
+    def generate(self, prompt, system):
+        raise TimeoutError("Ollama indisponible")
 
     def health(self):
         return {"status": "ok", "model": "fake", "model_available": True}
@@ -281,3 +310,113 @@ def test_validation_pydantic_champs():
         AnalyzeRequest(question="   ")
     with pytest.raises(ValidationError):
         AnalyzeRequest(question="ok", prob_abnormal=1.5)
+
+
+# --- Refus et abstention en anglais ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_message"),
+    [
+        ("Please diagnose this murmur for me.", REFUSAL_EN),
+        ("What dosage should I take?", PRESCRIPTION_EN),
+        ("I have severe chest pain, is it a heart attack?", EMERGENCY_EN),
+    ],
+)
+def test_refus_deterministe_en_anglais(question, expected_message):
+    llm = FakeLLM("You have a heart attack. Take 5 mg of bisoprolol.")
+    response = _orchestrator(llm=llm).analyze(
+        AnalyzeRequest(question=question, language="en")
+    )
+    assert response.status == "refused"
+    assert response.language == "en"
+    assert response.answer == expected_message
+    assert response.disclaimer.startswith("Educational information")
+    assert llm.calls == []
+
+
+def test_abstention_en_anglais():
+    response = _orchestrator(retriever=FakeRetriever([])).analyze(
+        AnalyzeRequest(question="What is the price of a train ticket?", language="en")
+    )
+    assert response.status == "abstained"
+    assert response.answer == ABSTENTION_EN
+    assert response.sources == []
+
+
+# --- Dégradation contrôlée ----------------------------------------------------
+
+
+def test_qdrant_indisponible_sans_invention():
+    llm = FakeLLM()
+    response = _orchestrator(retriever=BrokenRetriever(), llm=llm).analyze(
+        AnalyzeRequest(question="Qu'est-ce que le premier bruit B1 ?")
+    )
+    assert response.status == "error"
+    assert response.answer == SERVICE_UNAVAILABLE_FR
+    assert response.sources == []
+    assert any(issue.startswith("rag_unavailable:") for issue in response.audit.issues)
+    assert response.audit.passed is False
+    assert llm.calls == []
+
+
+def test_llm_indisponible_repli_extractif():
+    response = _orchestrator(llm=FailingLLM()).analyze(
+        AnalyzeRequest(question="Qu'est-ce que le premier bruit B1 ?")
+    )
+    assert response.status == "degraded"
+    assert any(issue.startswith("llm_unavailable:") for issue in response.audit.issues)
+    assert "documents sources" in response.answer
+    assert "sourd" in response.answer  # passage source verbatim
+    assert response.sources[0].source_id == "auscultation_cardiaque_normale"
+
+
+# --- Avertissements de l'auditeur --------------------------------------------
+
+
+def test_avertissement_ancrage_cross_lingue():
+    llm = FakeLLM(
+        "The first heart sound is intense, low and dull [1]. "
+        "It is educational information, not medical advice."
+    )
+    response = _orchestrator(llm=llm).analyze(
+        AnalyzeRequest(question="What is the first heart sound?", language="en")
+    )
+    assert response.status == "ok"
+    assert "cross_lingual_grounding" in response.audit.warnings
+    assert response.audit.grounded is True
+    assert response.audit.passed is True
+
+
+def test_avertissement_langue_incoherente():
+    # Le 1.5B répond parfois en français à une question anglaise : l'auditeur le signale.
+    response = _orchestrator(llm=FakeLLM()).analyze(
+        AnalyzeRequest(question="What is the first heart sound?", language="en")
+    )
+    assert response.language == "en"
+    assert "language_mismatch" in response.audit.warnings
+    assert response.audit.passed is True
+
+
+def test_health_degrade_quand_une_dependance_est_en_panne():
+    app = create_app(
+        retriever=BrokenRetriever(),
+        llm=FakeLLM(),
+        settings=Settings(llm_url="http://test", qdrant_url="http://test"),
+    )
+    body = TestClient(app).get("/health").json()
+    assert body["status"] == "degraded"
+    assert body["services"]["qdrant"]["status"] == "down"
+    assert body["services"]["llm"]["status"] == "ok"
+    assert body["model"] == "cardio-llm"
+
+
+def test_root_orchestrateur():
+    app = create_app(
+        retriever=FakeRetriever([B1_RESULT]),
+        llm=FakeLLM(),
+        settings=Settings(llm_url="http://test", qdrant_url="http://test"),
+    )
+    body = TestClient(app).get("/").json()
+    assert body["service"] == "agent-orchestrator"
+    assert body["graph"] == ["analyste", "cardiologue_rag", "auditeur"]

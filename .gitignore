@@ -58,6 +58,13 @@ llm_finetuning/mlruns.db
 # Environnement virtuel dédié au LLM local
 llm_finetuning/.venv-llm/
 
+# --- Couverture de tests (Jalon 6) --------------------------------------------
+# Le rapport textuel résumé est versionné ; les artefacts générés ne le sont pas.
+.coverage
+.coverage.*
+reports/htmlcov/
+reports/coverage.xml
+
 # --- Divers OS / éditeurs ------------------------------------------------------
 .DS_Store
 Thumbs.db

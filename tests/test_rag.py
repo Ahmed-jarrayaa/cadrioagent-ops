@@ -7,12 +7,15 @@ documentée dans ``rag_engine/README.md``.
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
 from rag_engine.chunk import build_chunks, chunk_pages, normalize, _split_long_text
 from rag_engine.embed import load_embeddings, save_embeddings
 from rag_engine.index_qdrant import collection_vector_size, index_chunks, make_client, point_id
+from rag_engine.evaluate import check_case, evaluate, main as evaluate_main
 from rag_engine.retrieve import NO_CONTEXT, format_context, retrieve
 
 
@@ -154,3 +157,73 @@ def test_index_refuse_taille_de_vecteur_differente():
             "fake/model",
             collection="test_size",
         )
+
+
+# --- Évaluation reproductible ------------------------------------------------
+
+
+def _case(**kwargs):
+    return {"id": "q1", "query": "B1 ?", "expected_source_id": "src", **kwargs}
+
+
+def _result(**kwargs):
+    return {
+        "text": "Le B1 est intense et sourd.",
+        "source_id": "src",
+        "page": 5,
+        "score": 0.8,
+        "disclaimer": "Usage pédagogique",
+        **kwargs,
+    }
+
+
+def test_check_case_valide_les_criteres():
+    assert check_case(_case(keywords_any=["sourd"], expect_disclaimer=True), [_result()]) == []
+
+
+def test_check_case_detecte_les_echecs():
+    assert check_case(_case(expect_empty=True), [_result()])
+    assert check_case(_case(), [])
+    assert any("source attendue" in f for f in check_case(_case(), [_result(source_id="autre")]))
+    assert any("mot-clé" in f for f in check_case(_case(keywords_any=["inexistant"]), [_result()]))
+    assert any("avertissement" in f for f in check_case(
+        _case(expect_disclaimer=True), [_result(disclaimer="")]
+    ))
+
+
+def test_evaluate_agrege_les_resultats(monkeypatch, tmp_path):
+    import rag_engine.evaluate as module
+
+    queries = tmp_path / "eval_queries.json"
+    queries.write_text(json.dumps([_case(keywords_any=["sourd"])]) + "\n", encoding="utf-8")
+    monkeypatch.setattr(module, "make_client", lambda url: object())
+    monkeypatch.setattr(module, "load_model", lambda name: object())
+    monkeypatch.setattr(module, "retrieve", lambda *args, **kwargs: [_result()])
+
+    report = evaluate(queries_path=queries, url="http://test", collection="test")
+    assert report["passed"] == 1
+    assert report["total"] == 1
+    assert report["details"][0]["status"] == "PASS"
+    assert report["details"][0]["top_source_id"] == "src"
+    assert report["details"][0]["top_page"] == 5
+    assert report["details"][0]["n_passages"] == 1
+
+
+def test_main_ecrit_le_rapport_et_le_code_de_sortie(monkeypatch, tmp_path):
+    import sys
+
+    import rag_engine.evaluate as module
+
+    queries = tmp_path / "queries.json"
+    queries.write_text("[]", encoding="utf-8")
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(module, "evaluate", lambda *args, **kwargs: {
+        "passed": 0, "total": 0, "details": [],
+    })
+    monkeypatch.setattr(sys, "argv", ["evaluate", "--queries", str(queries),
+                                      "--output", str(output)])
+
+    assert evaluate_main() == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["passed"] == 0
+    assert report["total"] == 0

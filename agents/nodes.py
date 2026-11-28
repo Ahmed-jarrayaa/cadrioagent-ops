@@ -41,6 +41,7 @@ PRESCRIPTION_PATTERNS = [
 
 DIAGNOSIS_PATTERNS = [
     r"^\s*(diagnostique|diagnostiquer|diagnose|diagnosis)\b",
+    r"\b(please|can you|could you|veuillez|peux-tu|pouvez-vous)\s+(me\s+)?(diagnostiquer|diagnose)\b",
     r"diagnostique[rz]? (le|la|ce|cet|mon|ma|mes|l'|the)\b",
     r"pose[rz]? (un|le) diagnostic|make a diagnosis|give me a diagnosis",
     r"est-ce que c'est (un|une|le|la)\b|is (this|it) (a|an)\b",
