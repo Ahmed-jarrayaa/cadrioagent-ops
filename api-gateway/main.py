@@ -15,8 +15,8 @@ def root():
         "service": "CardioAgent-Ops API Gateway",
         "status": "ok",
         "docs": "/docs",
-        "endpoints": ["/health", "/analyze_pcg", "/predict", "/analyze_all", "/predict_one",
-                      "/models", "/mlflow/experiments"],
+        "endpoints": ["/health", "/analyze", "/analyze_pcg", "/predict", "/analyze_all",
+                      "/predict_one", "/models", "/mlflow/experiments"],
     }
 
 @app.get("/health")
@@ -30,6 +30,19 @@ async def health():
             except Exception as e:
                 services[name] = {"status": "down", "error": str(e)}
     return {"status": "ok", "services": services}
+
+@app.post("/analyze")
+async def analyze(payload: dict):
+    """Proxy vers l'orchestrateur multi-agents (question ou résultat audio)."""
+    async with httpx.AsyncClient(timeout=300) as client:
+        try:
+            r = await client.post(f"{ORCH}/analyze", json=payload)
+        except Exception as e:
+            raise HTTPException(502, f"agent-orchestrator indisponible: {e}")
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
 
 @app.post("/analyze_pcg")
 async def analyze_pcg(file: UploadFile = File(...)):

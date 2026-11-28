@@ -546,9 +546,10 @@ Aucun test ne nécessite de GPU ni de téléchargement de modèle.
 2. ✅ Export GGUF `q4_k_m` (SHA-256 vérifié) et modèle Ollama `cardio-llm`.
 3. ✅ Smoke test des garde-fous en local et dans `llm-server` (Docker).
 4. ✅ Documentation des limites et des mesures dans `llm_finetuning/reports/`.
+5. ✅ RAG (`rag_engine/`, Qdrant) et orchestrateur 3 agents (`agents/`) branchés sur
+   `cardio-llm` ; 8/8 cas validés (voir `agents/reports/agent_smoke_1_5b.md`).
 
 Reste à faire si un GPU ≥ 12 Go devient disponible :
 
 1. exécuter `qlora_qwen25_7b.yaml` sur Colab, puis reproduire §7 et §8 ;
-2. comparer les métriques du 7B à celles du 1.5B (§7) ;
-3. relier le RAG (`vector-db`) et l'orchestrateur multi-agents au `llm-server` validé.
+2. comparer les métriques du 7B à celles du 1.5B (§7).

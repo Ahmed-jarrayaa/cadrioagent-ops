@@ -1,10 +1,18 @@
-# agent-orchestrator
-fastapi
-uvicorn
-langgraph
-langchain
-qdrant-client
-sentence-transformers
-pydantic>=2
-httpx
-mlflow==2.16.2
+# PyTorch CPU uniquement (évite les wheels CUDA dans l'image)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+
+# agent-orchestrator — graphe LangGraph + RAG + garde-fous Pydantic
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+langgraph>=1.0,<2
+pydantic>=2.7,<3
+httpx>=0.27,<1
+
+# RAG (Qdrant + embeddings multilingues)
+qdrant-client>=1.12,<2
+pypdf>=4
+numpy>=1.26,<3
+sentence-transformers==3.4.1
+transformers==4.46.3
+tokenizers==0.20.3

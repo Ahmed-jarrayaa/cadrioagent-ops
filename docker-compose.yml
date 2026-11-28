@@ -67,6 +67,12 @@ services:
       LLM_MODEL: cardio-llm
       QDRANT_URL: http://vector-db:6333
       MLFLOW_TRACKING_URI: http://mlflow-server:5000
+      HF_HOME: /root/.cache/huggingface
+      RAG_EMBEDDING_MODEL: BAAI/bge-m3
+      RAG_MIN_SCORE: "0.35"
+    volumes:
+      # Cache du modèle d'embedding (téléchargé au premier appel, puis persistant)
+      - hf_cache:/root/.cache/huggingface
     depends_on: [llm-server, vector-db, mlflow-server]
     networks: [docker-network]
 
@@ -91,3 +97,4 @@ volumes:
   ollama_data:
   qdrant_data:
   mlflow_data:
+  hf_cache:

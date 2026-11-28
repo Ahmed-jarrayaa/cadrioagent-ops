@@ -78,7 +78,7 @@ Le tout est exposé par une API FastAPI et une interface web, avec suivi des exp
              ▼                                         ▼
   ┌───────────────────────┐                  ┌─────────────────────┐
   │  audio-engine :8001   │                  │ agent-orchestrator  │
-  │  FastAPI + registry   │                  │ :8002 (stub)        │
+  │  FastAPI + registry   │                  │ :8002 LangGraph     │
   └───────────┬───────────┘                  └─────────────────────┘
               │
               │ charge les artefacts locaux
@@ -103,7 +103,7 @@ réseau Docker).
 
 ```text
 .
-├── agents/main.py                  # orchestrateur d'agents (stub FastAPI, port 8002)
+├── agents/                         # graphe LangGraph, schémas Pydantic, prompts, clients
 ├── api-gateway/                    # passerelle FastAPI (proxy audio-engine/orchestrateur/MLflow)
 │   ├── main.py
 │   ├── requirements.txt
@@ -397,7 +397,7 @@ docker compose ps
 | `vector-db` (Qdrant) | **6333** | base vectorielle RAG (collection `cardio_docs`) |
 | `llm-server` (Ollama) | **11434** | LLM local `cardio-llm` (1.5B) |
 | `audio-engine` | interne `8001` | inférence SVM / arbre / CNN / ONNX |
-| `agent-orchestrator` | interne `8002` | orchestrateur d'agents (stub) |
+| `agent-orchestrator` | interne `8002` | graphe LangGraph Analyste → Cardiologue RAG → Auditeur |
 
 - API gateway : <http://localhost:8085/docs>
 - MLflow : <http://localhost:5000>
@@ -420,8 +420,8 @@ docker compose down -v                   # arrêt + suppression des volumes
   `docker-compose.yml`, sinon `docker compose up` peut échouer.
 - Le service `llm-server` crée `cardio-llm` depuis `llm_finetuning/export/Modelfile` et le
   GGUF local (non versionné, 940 Mo). Vérifié : `/api/tags` expose bien `cardio-llm:latest`.
-- `agent-orchestrator` est un **stub** : `POST /analyze` renvoie simplement la charge reçue.
-  Le pipeline RAG est prêt à être branché (§9.4).
+- `agent-orchestrator` exécute le graphe LangGraph à trois agents (§9.5). Les refus
+  (diagnostic, prescription, urgence) sont déterministes et ne passent pas par le LLM.
 - Les modèles sont montés en lecture seule depuis `./audio_engine/models`.
 - L'audio-engine n'expose pas de port hôte : passer par la gateway (`8085`). Pour l'exposer
   directement, ajouter `ports: ["8001:8001"]` au service.
@@ -450,6 +450,40 @@ Résultat mesuré : **66 passages**, embeddings `BAAI/bge-m3` (1024 dims, cosinu
 **6/6 questions validées** (`rag_engine/reports/rag_evaluation.json`), dont le rejet d'une
 question hors corpus. Les IDs de passages sont stables (SHA-256) : l'indexation est idempotente.
 Détails et licences : `rag_engine/README.md`.
+
+### 9.5 Orchestrateur multi-agents (LangGraph)
+
+Le service `agent-orchestrator` implémente le graphe d'états **Analyste → Cardiologue RAG →
+Auditeur** demandé au Jalon 5. Les sorties sont validées par Pydantic (`AnalyzeResponse`).
+
+```powershell
+# local (Qdrant et Ollama doivent être accessibles)
+$env:LLM_URL='http://127.0.0.1:11434'
+$env:QDRANT_URL='http://127.0.0.1:6333'
+.\.venv\Scripts\python.exe -m uvicorn agents.main:app --host 127.0.0.1 --port 8002
+
+# question pédagogique
+curl.exe -s -X POST http://127.0.0.1:8002/analyze -H "Content-Type: application/json" `
+  -d "{\"question\":\"Qu'est-ce que le premier bruit B1 ?\",\"top_k\":4}"
+
+# résultat audio (payload de /analyze_pcg)
+curl.exe -s -X POST http://127.0.0.1:8002/analyze -H "Content-Type: application/json" `
+  -d "{\"prediction\":\"abnormal\",\"prob_abnormal\":0.82,\"threshold\":0.5}"
+```
+
+Garde-fous :
+
+- **diagnostic / prescription / urgence** : réponse de refus canonique, **sans appel au LLM** ;
+- **connaissance** : le LLM ne reformule que les passages RAG, avec citation `[n]` ;
+- **absence de source** : abstention explicite, jamais d'invention ;
+- **audit** : remplace une réponse non ancrée ou contenant un diagnostic/dosage interdit ;
+- **résultat audio** : requalifié en score de dépistage, avec avertissement explicite.
+
+Validation locale (8 cas, rapport `agents/reports/agent_smoke_1_5b.json`) : **8/8 audits OK** —
+1 question B1 FR, 1 question EN, 1 score audio FR, 1 score audio EN, 3 refus (diagnostic,
+urgence, prescription) et 1 question hors corpus abstention. Le détail est dans
+`agents/README.md`. Le service Docker sera reconstruit au Jalon 7 (`docker compose build
+agent-orchestrator`), avec un volume `hf_cache` pour le modèle d'embedding.
 
 ---
 
@@ -531,6 +565,7 @@ Erreurs fréquentes :
 | `POST` | `/predict` | proxy direct vers l'audio-engine `/predict` (ONNX) |
 | `POST` | `/analyze_all?families=svm,tree,cnn` | proxy vers `/predict_all` |
 | `POST` | `/predict_one?family=svm` | proxy vers `/predict_one` |
+| `POST` | `/analyze` | proxy JSON vers l'orchestrateur (question ou score audio) |
 | `POST` | `/analyze_pcg` | ONNX puis orchestrateur (`/analyze`) |
 | `GET` | `/models` | proxy vers `/models` |
 | `GET` | `/mlflow/experiments` | liste des expériences MLflow |
@@ -544,6 +579,49 @@ curl.exe -s -X POST "http://127.0.0.1:8085/analyze_all?families=svm,cnn" `
 curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
   -F "file=@ourdataset/train/normal/101_1305030823364_B.wav"
 ```
+
+### 10.3 agent-orchestrator (`:8002`)
+
+| Méthode | Route | Description |
+|---|---|---|
+| `GET` | `/` | liste des agents et endpoints |
+| `GET` | `/health` | état de Qdrant, du LLM et de la collection |
+| `POST` | `/analyze` | question libre **ou** payload audio ; réponse auditée Pydantic |
+
+Requête minimale :
+
+```json
+{ "question": "Qu'est-ce que le premier bruit B1 ?", "top_k": 4 }
+```
+
+Réponse (champs principaux) :
+
+```json
+{
+  "status": "ok",
+  "language": "fr",
+  "intent": "knowledge",
+  "answer": "Le premier bruit B1 se situe en début de systole…",
+  "sources": [
+    { "source_id": "auscultation_cardiaque_normale", "page": 5, "score": 0.631 }
+  ],
+  "audit": { "passed": true, "grounded": true, "citations": 0, "issues": [], "warnings": [] },
+  "guardrails": {
+    "refusal_applied": false,
+    "emergency_redirect": false,
+    "diagnosis_blocked": true,
+    "prescription_blocked": true
+  },
+  "audio": null,
+  "model": "cardio-llm",
+  "latency_ms": 1450.2,
+  "disclaimer": "Information pédagogique… pas un avis médical."
+}
+```
+
+`status` vaut `ok`, `refused`, `abstained`, `degraded` ou `error`. Un `422` signale une
+requête invalide (ni question ni score audio, `top_k` hors bornes) ; un `503` signale un
+orchestrateur indisponible. Détails : `agents/README.md`.
 
 ---
 
