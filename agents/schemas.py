@@ -8,12 +8,12 @@ garde-fous.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Language = Literal["fr", "en"]
-Intent = Literal["knowledge", "diagnosis", "prescription", "emergency", "out_of_scope"]
+Intent = Literal["knowledge", "report", "diagnosis", "prescription", "emergency", "out_of_scope"]
 Status = Literal["ok", "refused", "abstained", "degraded", "error"]
 
 
@@ -26,6 +26,10 @@ class AnalyzeRequest(BaseModel):
     top_k: int = Field(default=4, ge=1, le=10)
     language: Literal["fr", "en", "auto"] = "auto"
     patient_context: str | None = Field(default=None, max_length=1000)
+
+    # Mode « rapport » : résultats réels du workflow 5 modèles + instruction.
+    mode: Literal["chat", "report"] = "chat"
+    workflow: dict[str, Any] | None = None
 
     # Champs du payload audio-engine (POST /predict) transmis par /analyze_pcg.
     filename: str | None = None

@@ -11,6 +11,7 @@ from agents.config import Settings
 from agents.graph import build_graph
 from agents.nodes import detect_language
 from agents.prompts import DISCLAIMER_EN, DISCLAIMER_FR
+from agents.report import factual_report, workflow_summary
 from agents.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -75,6 +76,8 @@ class Orchestrator:
     def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
         started = perf_counter()
         audio = audio_from_request(request)
+        mode = request.mode
+        workflow = request.workflow or {}
 
         if request.question:
             question = request.question.strip()
@@ -84,13 +87,30 @@ class Orchestrator:
             assert audio is not None
             question = build_audio_question(audio, language)
 
+        if mode == "report":
+            if not question:
+                question = (
+                    "Génère un rapport pédagogique à partir des résultats réels des modèles."
+                    if language != "en" else
+                    "Generate an educational report from the real model results."
+                )
+            facts = factual_report(workflow, language)
+            summary = workflow_summary(workflow)
+        else:
+            facts = None
+            summary = None
+
         initial_state = {
             "question": question,
             "language": language,
             "top_k": request.top_k,
             "patient_context": request.patient_context,
             "audio": audio.model_dump() if audio else None,
-            "audio_prompt": bool(audio and not request.question),
+            "audio_prompt": bool(audio and not request.question and mode != "report"),
+            "mode": mode,
+            "workflow": workflow,
+            "workflow_summary": summary,
+            "factual_report": facts,
         }
         final = self._graph.invoke(initial_state)
 

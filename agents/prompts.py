@@ -98,8 +98,63 @@ Mandatory rules:
 8. End with: "Educational information, not medical advice." """
 
 
+SYSTEM_REPORT_FR = """Tu es un agent de rapport pédagogique pour un projet académique de dépistage audio.
+Tu ne rédiges AUCUNE phrase libre. Tu confirme uniquement les faits du BLOC DE FAITS (résultats
+réels des cinq modèles) sous une forme strictement contrôlée.
+
+Réponds uniquement par cette ligne, sans autre texte :
+PREDICTION=<normal|abnormal>; MODELS_OK=<entier>; MODELS_TOTAL=<entier>; VOTES_NORMAL=<entier>; VOTES_ABNORMAL=<entier>; DIVERGENCES=<entier>
+
+Règles impératives :
+1. Recopie exactement les valeurs du BLOC DE FAITS, sans les arrondir ni les commenter.
+2. DIVERGENCES = nombre de modèles disponibles dont la prédiction diffère de PREDICTION.
+3. N'ajoute aucun diagnostic, aucune prescription, aucune interprétation clinique."""
+
+SYSTEM_REPORT_EN = """You are an educational report agent for an academic audio-screening project.
+Write NO free text. Only confirm the facts from the FACTS BLOCK (real results of the five models)
+in a strictly controlled format.
+
+Reply with this single line and nothing else:
+PREDICTION=<normal|abnormal>; MODELS_OK=<integer>; MODELS_TOTAL=<integer>; VOTES_NORMAL=<integer>; VOTES_ABNORMAL=<integer>; DIVERGENCES=<integer>
+
+Mandatory rules:
+1. Copy the FACTS BLOCK values exactly, without rounding or commenting.
+2. DIVERGENCES = number of available models whose prediction differs from PREDICTION.
+3. Add no diagnosis, prescription, or clinical interpretation. """
+
+
 def system_prompt(language: str) -> str:
     return SYSTEM_EN if language == "en" else SYSTEM_FR
+
+
+def report_system_prompt(language: str) -> str:
+    return SYSTEM_REPORT_EN if language == "en" else SYSTEM_REPORT_FR
+
+
+def build_report_prompt(
+    instruction: str,
+    factual: str,
+    context: str,
+    language: str,
+) -> str:
+    """Prompt du rapport : faits réels + passages + instruction de l'utilisateur."""
+    fr = language != "en"
+    facts_label = "BLOC DE FAITS (résultats réels, ne pas modifier)" if fr else "FACTS BLOCK (real results, do not alter)"
+    source_label = "PASSAGES SOURCES" if fr else "SOURCE PASSAGES"
+    instruction_label = "INSTRUCTION DE L'UTILISATEUR" if fr else "USER INSTRUCTION"
+    rule = (
+        "Confirme uniquement les faits avec la ligne PREDICTION=... demandée. "
+        "N'écris ni interprétation ni conclusion."
+        if fr else
+        "Only confirm the facts with the requested PREDICTION=... line. "
+        "Write no interpretation and no conclusion."
+    )
+    return "\n\n".join([
+        f"{facts_label} :\n{factual}",
+        f"{source_label} :\n{context}",
+        f"{instruction_label} :\n{instruction.strip()}",
+        rule,
+    ])
 
 
 def build_user_prompt(

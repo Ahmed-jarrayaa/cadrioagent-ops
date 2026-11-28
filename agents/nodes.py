@@ -14,9 +14,18 @@ from agents.clients import LLM, Retriever
 from agents.config import Settings
 from agents.prompts import (
     audio_limit,
+    build_report_prompt,
     build_user_prompt,
     canonical_answer,
+    report_system_prompt,
     system_prompt,
+)
+from agents.report import (
+    deterministic_conclusion,
+    deterministic_interpretation,
+    factual_report,
+    structured_confirmation_matches,
+    workflow_summary,
 )
 from agents.state import AnalysisState
 
@@ -184,7 +193,14 @@ def analyste_node(state: AnalysisState) -> dict[str, Any]:
     language = state.get("language") or detect_language(question)
     if language not in {"fr", "en"}:
         language = "fr"
-    if state.get("audio") and state.get("audio_prompt"):
+    mode = state.get("mode", "chat")
+    if mode == "report":
+        # L'instruction garde sa classification de sécurité, mais la documentation
+        # recherchée porte sur le dépistage, pas sur les chiffres du workflow.
+        detected = classify_intent(question)
+        intent = detected if detected != "knowledge" else "report"
+        retrieval_query = AUDIO_QUERY[language]
+    elif state.get("audio") and state.get("audio_prompt"):
         # Question générée à partir d'un score : information de dépistage, jamais un diagnostic.
         intent = "knowledge"
         retrieval_query = AUDIO_QUERY[language]
@@ -198,6 +214,70 @@ def analyste_node(state: AnalysisState) -> dict[str, Any]:
         "intent": intent,
         "retrieval_query": retrieval_query,
         "issues": [],
+    }
+
+
+def report_cardiologue_node(
+    state: AnalysisState, retriever: Retriever, llm: LLM, settings: Settings
+) -> dict[str, Any]:
+    """Agent 2 (mode rapport) : faits du workflow + interprétation LLM bornée."""
+    language = state.get("language", "fr")
+    workflow = state.get("workflow") or {}
+    instruction = state.get("question") or ""
+    facts = state.get("factual_report") or factual_report(workflow, language)
+    summary = state.get("workflow_summary") or workflow_summary(workflow)
+    issues: list[str] = []
+    warnings: list[str] = []
+    results: list[dict[str, Any]] = []
+    context = ""
+
+    try:
+        results = retriever.retrieve(
+            state.get("retrieval_query") or AUDIO_QUERY[language],
+            state.get("top_k", settings.top_k),
+        )
+    except Exception as error:
+        issues.append(f"rag_unavailable:{type(error).__name__}")
+        warnings.append("report_without_passages")
+    if results:
+        from rag_engine.retrieve import format_context
+
+        context = format_context(results, max_chars=settings.max_context_chars)
+    elif not issues:
+        warnings.append("report_without_passages")
+
+    if context and not issues:
+        prompt = build_report_prompt(instruction, facts, context, language)
+        interpretation = deterministic_interpretation(workflow, language)
+        try:
+            confirmation = llm.generate(prompt, report_system_prompt(language))
+            if structured_confirmation_matches(confirmation, workflow):
+                status = "ok"
+            else:
+                status = "degraded"
+                warnings.append("llm_confirmation_rejected")
+        except Exception as error:
+            interpretation = deterministic_interpretation(workflow, language)
+            status = "degraded"
+            issues.append(f"llm_unavailable:{type(error).__name__}")
+    else:
+        interpretation = deterministic_interpretation(workflow, language)
+        status = "degraded"
+
+    conclusion = deterministic_conclusion(workflow, language, instruction)
+    answer = f"{facts}\n\n{interpretation}\n\n{conclusion}"
+    grounding_context = "\n\n".join(part for part in (context, facts, summary) if part)
+    return {
+        "answer": answer,
+        "draft_answer": answer,
+        "status": status,
+        "results": results,
+        "context": grounding_context,
+        "grounded": is_grounded(interpretation, grounding_context),
+        "citations": count_citations(answer),
+        "issues": issues,
+        "warnings": warnings,
+        "workflow_summary": summary,
     }
 
 
@@ -221,6 +301,9 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
                 "refusal_applied": True,
                 "emergency_redirect": intent == "emergency",
             }
+
+        if state.get("mode") == "report":
+            return report_cardiologue_node(state, retriever, llm, settings)
 
         try:
             results = retriever.retrieve(state.get("retrieval_query") or state["question"], state.get("top_k", settings.top_k))
@@ -306,6 +389,7 @@ def auditeur_node(state: AnalysisState) -> dict[str, Any]:
 
     results = state.get("results") or []
     context = state.get("context") or ""
+    is_report = state.get("mode") == "report"
 
     if status == "error":
         return {
@@ -318,6 +402,21 @@ def auditeur_node(state: AnalysisState) -> dict[str, Any]:
         }
 
     if not results:
+        if is_report and answer:
+            # Le rapport factuel reste valable même sans passage RAG : on le
+            # conserve, on signale l'absence de sources documentaires.
+            if "report_without_passages" not in warnings:
+                warnings.append("report_without_passages")
+            return {
+                "answer": answer,
+                "status": "degraded" if status == "ok" else status,
+                "grounded": bool(state.get("grounded", False)),
+                "citations": citations,
+                "issues": issues,
+                "warnings": warnings,
+                "refusal_applied": False,
+                "emergency_redirect": False,
+            }
         return {
             "answer": canonical_answer(language, "abstention"),
             "status": "abstained",

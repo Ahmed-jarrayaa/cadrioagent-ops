@@ -1,6 +1,6 @@
 # CardioAgent-Ops
 
-**Analyse assistée de signaux phonocardiographiques (PCG) — SVM, arbre de décision et CNN, avec consensus multi-modèles et interface web.**
+**Analyse assistée de signaux phonocardiographiques (PCG) — SVM, arbre de décision, CNN, Transfer Learning et Transformer-CNN, avec consensus multi-modèles, chat RAG et interface web.**
 
 CardioAgent-Ops est un projet académique (TP3 — Data Mining) qui prend un enregistrement
 cardiaque au format **WAV**, le prétraite de façon identique à l'entraînement, applique trois
@@ -494,11 +494,11 @@ agent-orchestrator`), avec un volume `hf_cache` pour le modèle d'embedding.
 | Méthode | Route | Description |
 |---|---|---|
 | `GET` | `/` | liste des endpoints |
-| `GET` | `/health` | état du modèle ONNX et des trois modèles TP3 |
+| `GET` | `/health` | état du modèle ONNX et des cinq modèles TP3 |
 | `GET` | `/models` | seuils, runs MLflow, métriques disponibles |
 | `POST` | `/predict` | modèle ONNX historique (`models/cardio_model.onnx`) |
-| `POST` | `/predict_all?families=svm,tree,cnn` | les trois modèles + consensus |
-| `POST` | `/predict_one?family=svm` | un seul modèle (`svm`, `tree` ou `cnn`) |
+| `POST` | `/predict_all?families=svm,tree,cnn,tl,hybrid` | les cinq modèles + consensus |
+| `POST` | `/predict_one?family=svm` | un seul modèle (`svm`, `tree`, `cnn`, `tl` ou `hybrid`) |
 
 Exemples :
 
@@ -506,7 +506,7 @@ Exemples :
 curl.exe -s http://127.0.0.1:8001/health
 curl.exe -s http://127.0.0.1:8001/models
 
-curl.exe -s -X POST "http://127.0.0.1:8001/predict_all?families=svm,tree,cnn" `
+curl.exe -s -X POST "http://127.0.0.1:8001/predict_all?families=svm,tree,cnn,tl,hybrid" `
   -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav"
 
 curl.exe -s -X POST "http://127.0.0.1:8001/predict_one?family=svm" `
@@ -523,9 +523,9 @@ Réponse simplifiée de `/predict_all` :
   "n_segments": 4,
   "consensus": {
     "prediction": "abnormal",
-    "votes": { "normal": 1, "abnormal": 2 },
-    "models_ok": 3,
-    "models_total": 3,
+    "votes": { "normal": 1, "abnormal": 4 },
+    "models_ok": 5,
+    "models_total": 5,
     "mean_prob_abnormal": 0.74,
     "mean_threshold": 0.30
   },
@@ -563,9 +563,10 @@ Erreurs fréquentes :
 | `GET` | `/` | informations et liste des endpoints |
 | `GET` | `/health` | état de la gateway, de l'audio-engine, de l'orchestrateur et de MLflow |
 | `POST` | `/predict` | proxy direct vers l'audio-engine `/predict` (ONNX) |
-| `POST` | `/analyze_all?families=svm,tree,cnn` | proxy vers `/predict_all` |
+| `POST` | `/analyze_all?families=svm,tree,cnn,tl,hybrid` | proxy vers `/predict_all` |
+| `POST` | `/analyze_all_report` | **5 modèles obligatoires puis rapport** (`file` + `instruction`) |
 | `POST` | `/predict_one?family=svm` | proxy vers `/predict_one` |
-| `POST` | `/analyze` | proxy JSON vers l'orchestrateur (question ou score audio) |
+| `POST` | `/analyze` | proxy JSON vers l'orchestrateur (question, score audio ou `mode=report`) |
 | `POST` | `/analyze_pcg` | ONNX puis orchestrateur (`/analyze`) |
 | `GET` | `/models` | proxy vers `/models` |
 | `GET` | `/mlflow/experiments` | liste des expériences MLflow |
@@ -575,6 +576,10 @@ curl.exe -s http://127.0.0.1:8085/health
 
 curl.exe -s -X POST "http://127.0.0.1:8085/analyze_all?families=svm,cnn" `
   -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav"
+
+curl.exe -s -X POST "http://127.0.0.1:8085/analyze_all_report" `
+  -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav" `
+  -F "instruction=Analyse ce signal cardiaque et génère un rapport détaillé."
 
 curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
   -F "file=@ourdataset/train/normal/101_1305030823364_B.wav"
@@ -586,7 +591,7 @@ curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
 |---|---|---|
 | `GET` | `/` | liste des agents et endpoints |
 | `GET` | `/health` | état de Qdrant, du LLM et de la collection |
-| `POST` | `/analyze` | question libre **ou** payload audio ; réponse auditée Pydantic |
+| `POST` | `/analyze` | question libre, payload audio ou rapport (`mode=report`, `workflow`) ; réponse auditée Pydantic |
 
 Requête minimale :
 
@@ -678,10 +683,15 @@ Fonctionnement :
 - **découverte automatique** du service disponible, dans cet ordre :
   `localhost:8085` (gateway), `127.0.0.1:8085`, `localhost:8001` (audio-engine),
   `127.0.0.1:8001`, puis l'origine courante ;
-- dépôt ou sélection d'un **WAV** ;
-- appel de `/analyze_all` (gateway) ou `/predict_all` (audio-engine) ;
-- affichage des trois cartes de résultats, du **consensus**, des métriques de référence et des
-  détails techniques (probabilités par segment, caractéristiques moyennes) ;
+- dépôt ou sélection d'un **WAV**, puis saisie facultative d'une **instruction** de rapport ;
+- appel de `/analyze_all_report` (gateway) : les 5 modèles reçoivent le même signal prétraité,
+  puis l'agent rédige le rapport ; repli sur `/analyze_all` ou `/predict_all` si cette route
+  n'est pas disponible ;
+- affichage des cinq cartes de résultats, du **consensus**, des divergences, des métriques de
+  référence et des détails techniques (probabilités par segment, caractéristiques moyennes) ;
+- panneau **Rapport généré** : prédictions, classification globale, scores, caractéristiques,
+  comparaison, interprétation et conclusion répondant à l'instruction. Le rapport n'est produit
+  qu'après les 5 prédictions et n'invente aucune valeur ; les modèles sont validés sur PCG, pas ECG ;
 - panneau **Chat RAG** : questions via `POST /analyze`, réponses sourcées, audit, garde-fous et
   refus déterministes affichés dans l'interface ;
 - panneau **Rapport & preuves** : liens vers `RAPPORT_TECHNIQUE.md`, les rapports LLM/RAG/agents,
@@ -817,7 +827,7 @@ Résultat attendu : **117 tests passed**. `pytest.ini` limite la collecte à `te
   --cov-report=xml:reports/coverage.xml --cov-report=html:reports/htmlcov
 ```
 
-Le rapport textuel versionné est `reports/coverage.txt` : **51 % de couverture globale**, avec
+Le rapport textuel versionné est `reports/coverage.txt` : **55 % de couverture globale**, avec
 **83 à 100 % sur les services applicatifs** (`agents/`, `api-gateway/main.py`,
 `rag_engine/evaluate.py`, `audio_engine/preprocess.py`). Le pourcentage global est plus faible
 parce que la mesure inclut les utilitaires d'entraînement (`registry.py`, `fold_utils.py`,

@@ -341,7 +341,130 @@ def test_abstention_en_anglais():
     )
     assert response.status == "abstained"
     assert response.answer == ABSTENTION_EN
-    assert response.sources == []
+
+
+# --- Rapport à partir du workflow 5 modèles ----------------------------------
+
+
+REPORT_WORKFLOW = {
+    "instruction": "Analyse ce signal cardiaque et génère un rapport détaillé sur son état.",
+    "analysis": [
+        {"key": "svm", "label": "SVM (rbf)", "status": "ok", "prediction": "abnormal",
+         "prob_abnormal_mean": 0.81, "prob_abnormal_max": 0.92, "threshold": 0.5,
+         "training_metrics_reference": {"accuracy": 0.8589}},
+        {"key": "tree", "label": "Arbre de décision", "status": "ok", "prediction": "abnormal",
+         "prob_abnormal_mean": 0.74, "prob_abnormal_max": 0.86, "threshold": 0.5},
+        {"key": "cnn", "label": "CNN (Mel)", "status": "ok", "prediction": "normal",
+         "prob_abnormal_mean": 0.21, "prob_abnormal_max": 0.34, "threshold": 0.37},
+        {"key": "tl", "label": "Transfer Learning", "status": "ok", "prediction": "abnormal",
+         "prob_abnormal_mean": 0.66, "prob_abnormal_max": 0.78, "threshold": 0.486},
+        {"key": "hybrid", "label": "Transformer-CNN", "status": "error",
+         "error": "ValueError: artefact absent"},
+    ],
+    "consensus": {"prediction": "abnormal", "votes": {"normal": 1, "abnormal": 3},
+                  "models_ok": 4, "models_total": 5, "mean_prob_abnormal": 0.605,
+                  "mean_threshold": 0.464},
+    "feature_summary": {"zcr_mean": 0.12, "spectral_centroid_hz": 88.4, "rms_mean": 0.03},
+    "duration_s": 5.0,
+    "n_segments": 1,
+    "sample_rate_used": 2000,
+}
+REPORT_INSTRUCTION = REPORT_WORKFLOW["instruction"]
+
+
+def _report_request(**kwargs):
+    payload = {
+        "mode": "report",
+        "question": REPORT_INSTRUCTION,
+        "workflow": REPORT_WORKFLOW,
+        "prediction": "abnormal",
+        "prob_abnormal": 0.605,
+        "threshold": 0.464,
+        "model": "predict_all (5 modèles)",
+    }
+    payload.update(kwargs)
+    return AnalyzeRequest(**payload)
+
+
+def test_rapport_contient_les_resultats_reels_des_cinq_modeles():
+    llm = FakeLLM(
+        "PREDICTION=abnormal; MODELS_OK=4; MODELS_TOTAL=5; "
+        "VOTES_NORMAL=1; VOTES_ABNORMAL=3; DIVERGENCES=1"
+    )
+    response = _orchestrator(llm=llm).analyze(_report_request())
+
+    assert response.status == "ok"
+    assert response.intent == "report"
+    assert response.question == REPORT_INSTRUCTION
+    assert "SVM (rbf)" in response.answer
+    assert "Arbre de décision" in response.answer
+    assert "CNN (Mel)" in response.answer
+    assert "Transfer Learning" in response.answer
+    assert "Transformer-CNN" in response.answer
+    assert "Classification globale" in response.answer
+    assert "Divergences" in response.answer
+    assert "Centroïde spectral" in response.answer
+    assert "0,605" in response.answer or "0.605" in response.answer
+    assert "PCG" in response.answer
+    assert "ECG" in response.answer
+    assert "Conclusion" in response.answer
+    assert response.audio is not None
+    assert response.audit.passed is True
+    assert len(llm.calls) == 1
+    assert "BLOC DE FAITS" in llm.calls[0]["prompt"]
+    assert "INSTRUCTION DE L'UTILISATEUR" in llm.calls[0]["prompt"]
+
+
+def test_rapport_refuse_une_demande_de_diagnostic_sans_llm():
+    llm = FakeLLM("Vous avez une maladie.")
+    response = _orchestrator(llm=llm).analyze(
+        _report_request(question="Diagnostique ce signal cardiaque.")
+    )
+    assert response.status == "refused"
+    assert response.intent == "diagnosis"
+    assert response.answer == REFUSAL_FR
+    assert response.guardrails.refusal_applied is True
+    assert llm.calls == []
+
+
+def test_rapport_rejette_une_confirmation_llm_contradictoire():
+    llm = FakeLLM(
+        "PREDICTION=abnormal; MODELS_OK=5; MODELS_TOTAL=5; "
+        "VOTES_NORMAL=0; VOTES_ABNORMAL=5; DIVERGENCES=0"
+    )
+    response = _orchestrator(llm=llm).analyze(_report_request())
+    assert response.status == "degraded"
+    assert "llm_confirmation_rejected" in response.audit.warnings
+    assert "vote des modèles disponibles (4/5)" in response.answer
+
+
+def test_rapport_reste_disponible_si_llm_indisponible():
+    response = _orchestrator(llm=FailingLLM()).analyze(_report_request())
+    assert response.status == "degraded"
+    assert "SVM (rbf)" in response.answer
+    assert "Conclusion :" in response.answer
+    assert any(issue.startswith("llm_unavailable") for issue in response.audit.issues)
+
+
+def test_api_rapport_mode():
+    app = create_app(
+        retriever=FakeRetriever([B1_RESULT]),
+        llm=FakeLLM(),
+        settings=Settings(llm_url="http://test", qdrant_url="http://test"),
+    )
+    response = TestClient(app).post("/analyze", json={
+        "mode": "report",
+        "question": REPORT_INSTRUCTION,
+        "workflow": REPORT_WORKFLOW,
+        "prediction": "abnormal",
+        "prob_abnormal": 0.605,
+        "threshold": 0.464,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["intent"] == "report"
+    assert "SVM (rbf)" in body["answer"]
+    assert body["sources"][0]["source_id"] == "auscultation_cardiaque_normale"
 
 
 # --- Dégradation contrôlée ----------------------------------------------------

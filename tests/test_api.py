@@ -226,3 +226,86 @@ def test_mlflow_experiments(monkeypatch):
     assert response.json() == {"experiments": []}
     assert calls[0][1] == f"{gateway.MLFLOW}/api/2.0/mlflow/experiments/search"
     assert calls[0][2]["params"] == {"max_results": 50}
+
+
+# --- Workflow 5 modèles + rapport -------------------------------------------
+
+
+WORKFLOW = {
+    "filename": "signal.wav",
+    "analysis": [
+        {"key": key, "label": key.upper(), "status": "ok", "prediction": "abnormal",
+         "prob_abnormal_mean": 0.8, "prob_abnormal_max": 0.9, "threshold": 0.5}
+        for key in ("svm", "tree")
+    ] + [
+        {"key": key, "label": key.upper(), "status": "ok", "prediction": "normal",
+         "prob_abnormal_mean": 0.2, "prob_abnormal_max": 0.3, "threshold": 0.5}
+        for key in ("cnn", "tl")
+    ] + [
+        {"key": "hybrid", "label": "HYBRID", "status": "error", "error": "artefact absent"}
+    ],
+    "consensus": {"prediction": "abnormal", "votes": {"normal": 2, "abnormal": 2},
+                  "models_ok": 4, "models_total": 5, "mean_prob_abnormal": 0.5,
+                  "mean_threshold": 0.5},
+    "feature_summary": {"zcr_mean": 0.12, "spectral_centroid_hz": 88.4, "rms_mean": 0.03},
+    "duration_s": 5.0,
+    "n_segments": 1,
+    "sample_rate_used": 2000,
+    "preprocessing": {"bandpass_hz": [25, 400]},
+}
+REPORT = {"status": "ok", "intent": "report", "answer": "Rapport", "sources": []}
+
+
+def test_analyze_all_report_enchaine_5_modeles_puis_agent(monkeypatch):
+    calls = install_transport(monkeypatch, lambda method, url, kwargs: (
+        FakeResponse(WORKFLOW) if url.startswith(gateway.AUDIO) else FakeResponse(REPORT)
+    ))
+
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all_report",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+            data={"instruction": "Analyse ce signal et génère un rapport détaillé."},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "Rapport"
+    assert body["instruction"] == "Analyse ce signal et génère un rapport détaillé."
+    assert body["workflow"] == WORKFLOW
+    assert [call[1] for call in calls] == [
+        f"{gateway.AUDIO}/predict_all", f"{gateway.ORCH}/analyze"
+    ]
+    assert calls[0][2]["params"]["families"] == "svm,tree,cnn,tl,hybrid"
+    payload = calls[1][2]["json"]
+    assert payload["mode"] == "report"
+    assert payload["question"] == "Analyse ce signal et génère un rapport détaillé."
+    assert payload["workflow"]["analysis"][0]["key"] == "svm"
+    assert payload["prediction"] == "abnormal"
+    assert payload["prob_abnormal"] == 0.5
+
+
+def test_analyze_all_report_bloque_si_un_modele_manque(monkeypatch):
+    incomplete = dict(WORKFLOW, analysis=WORKFLOW["analysis"][:4])
+    calls = install_transport(monkeypatch, lambda method, url, kwargs: FakeResponse(incomplete))
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all_report", files={"file": ("signal.wav", b"RIFF", "audio/wav")}
+        )
+    assert response.status_code == 502
+    assert "hybrid" in response.json()["detail"]
+    assert len(calls) == 1  # l'agent n'est jamais appelé
+
+
+def test_analyze_all_report_valide_fichier_et_instruction(monkeypatch):
+    calls = install_transport(monkeypatch, lambda method, url, kwargs: FakeResponse(WORKFLOW))
+    with TestClient(gateway.app) as client:
+        assert client.post(
+            "/analyze_all_report", files={"file": ("signal.mp3", b"x", "audio/mpeg")}
+        ).status_code == 400
+        assert client.post(
+            "/analyze_all_report",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+            data={"instruction": "   "},
+        ).status_code == 400
+    assert calls == []

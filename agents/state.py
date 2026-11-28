@@ -16,6 +16,10 @@ class AnalysisState(TypedDict, total=False):
     patient_context: str | None
     audio: dict[str, Any] | None
     audio_prompt: bool
+    mode: str
+    workflow: dict[str, Any] | None
+    workflow_summary: str | None
+    factual_report: str | None
 
     results: list[dict[str, Any]]
     context: str

@@ -74,14 +74,25 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
   anglaise. L'interface web (`web/index.html`) expose désormais ce chat : elle appelle `/analyze`
   et affiche la réponse, les sources, l'audit et les garde-fous, ainsi qu'un panneau de liens vers
   les rapports et preuves du projet.
+- **Rapport d'analyse personnalisé** : la gateway expose `POST /analyze_all_report`. Elle appelle
+  `/predict_all` avec explicitement `families=svm,tree,cnn,tl,hybrid`, vérifie que les cinq familles
+  sont présentes dans la réponse, puis transmet un résumé des résultats réels à l'orchestrateur avec
+  `mode=report`. L'agent construit les sections factuelles (prédictions, scores, seuils,
+  caractéristiques, votes, divergences), l'interprétation et la conclusion à partir de ces seules
+  valeurs ; aucun chiffre n'est inventé. Le LLM est limité à une ligne structurée de confirmation
+  des faits ; si sa confirmation contredit le workflow, elle est rejetée
+  (`llm_confirmation_rejected`) et l'audit le signale. En cas d'indisponibilité du LLM, l'audit
+  signale `llm_unavailable` et le rapport reste disponible.
+  L'interface affiche ce rapport après les cinq cartes de modèles. Les modèles restent validés sur
+  des signaux PCG ; aucune validation ECG n'est revendiquée.
 
 ## 5. Jalon 6 — Tests continus
 
-- **117 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
+- **125 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
   avec faux ONNX), `tests/test_api.py` (proxys gateway avec `httpx` factice),
   `tests/test_agents.py` (graphe, garde-fous FR/EN, audit) et `tests/test_rag.py` (chunking,
   Qdrant mémoire, évaluation).
-- Couverture (`reports/coverage.txt`) : **51 % globale**, 83–100 % sur les services applicatifs.
+- Couverture (`reports/coverage.txt`) : **55 % globale**, 83–100 % sur les services applicatifs.
   Le reste correspond aux utilitaires d'entraînement (`registry.py`, `fold_utils.py`,
   `mlflow_utils.py`, `src/dataset.py`) qui ne sont pas exécutés par les tests de service.
 - Aucun test ne charge de modèle volumineux, n'appelle un service distant ni ne modifie les
