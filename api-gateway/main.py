@@ -86,6 +86,16 @@ async def _check_prompt(client: Any, instruction: str) -> dict[str, Any]:
             "reason": "ok", "message": ""}
 
 
+async def _require_prompt(client: Any, instruction: str) -> None:
+    """Bloque la prédiction si le prompt n'a pas été validé."""
+    instruction = (instruction or "").strip()
+    if not instruction:
+        raise HTTPException(400, "Une instruction est requise pour lancer une prédiction.")
+    validation = await _check_prompt(client, instruction)
+    if not validation["relevant"]:
+        raise HTTPException(400, validation["message"])
+
+
 class WorkflowTracker:
     """Trace le workflow dans MLflow via son API REST (aucun SDK requis).
 
@@ -311,9 +321,10 @@ def root():
         "service": "CardioAgent-Ops API Gateway",
         "status": "ok",
         "docs": "/docs",
-        "endpoints": ["/health", "/workflow/services", "/analyze", "/analyze_pcg", "/predict",
-                      "/analyze_all", "/analyze_all_report", "/analyze_all_report/stream",
-                      "/predict_one", "/models", "/mlflow/experiments"],
+        "endpoints": ["/health", "/workflow/services", "/check_prompt", "/analyze",
+                      "/analyze_pcg", "/predict", "/analyze_all", "/analyze_all_report",
+                      "/analyze_all_report/stream", "/predict_one", "/models",
+                      "/mlflow/experiments"],
     }
 
 @app.get("/health")
@@ -378,6 +389,20 @@ async def workflow_services():
 
     return {"status": "ok", "order": list(SERVICE_ORDER), "services": services}
 
+@app.post("/check_prompt")
+async def check_prompt(payload: dict):
+    """Proxy de validation du prompt, avant toute prédiction."""
+    instruction = str(payload.get("instruction") or "")
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            r = await client.post(f"{ORCH}/check_prompt", json={"instruction": instruction})
+        except Exception as e:
+            raise HTTPException(502, f"agent-orchestrator indisponible: {e}")
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
+
 @app.post("/analyze")
 async def analyze(payload: dict):
     """Proxy vers l'orchestrateur multi-agents (question ou résultat audio)."""
@@ -392,11 +417,15 @@ async def analyze(payload: dict):
 
 
 @app.post("/analyze_pcg")
-async def analyze_pcg(file: UploadFile = File(...)):
+async def analyze_pcg(
+    file: UploadFile = File(...),
+    instruction: str = Form(DEFAULT_INSTRUCTION),
+):
     if not file.filename.lower().endswith(".wav"):
         raise HTTPException(400, "Fichier .wav requis")
     data = await file.read()
     async with httpx.AsyncClient(timeout=120) as client:
+        await _require_prompt(client, instruction)
         r1 = await client.post(f"{AUDIO}/predict",
                                files={"file": (file.filename, data, "audio/wav")})
         r1.raise_for_status()
@@ -406,12 +435,16 @@ async def analyze_pcg(file: UploadFile = File(...)):
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
-    """Proxy direct vers audio-engine /predict (ONNX)."""
+async def predict(
+    file: UploadFile = File(...),
+    instruction: str = Form(DEFAULT_INSTRUCTION),
+):
+    """Proxy direct vers audio-engine /predict (ONNX), après validation du prompt."""
     if not file.filename.lower().endswith(".wav"):
         raise HTTPException(400, "Fichier .wav requis")
     data = await file.read()
     async with httpx.AsyncClient(timeout=120) as client:
+        await _require_prompt(client, instruction)
         r = await client.post(f"{AUDIO}/predict", files={"file": (file.filename, data, "audio/wav")})
         if r.status_code >= 400:
             raise HTTPException(r.status_code, r.text)
@@ -419,13 +452,18 @@ async def predict(file: UploadFile = File(...)):
 
 
 @app.post("/analyze_all")
-async def analyze_all(file: UploadFile = File(...), families: str | None = None):
-    """Applique les modèles TP3 (SVM, arbre de décision, CNN) enregistrés dans MLflow."""
+async def analyze_all(
+    file: UploadFile = File(...),
+    families: str | None = None,
+    instruction: str = Form(DEFAULT_INSTRUCTION),
+):
+    """Applique les 5 modèles, uniquement après validation du prompt."""
     if not file.filename.lower().endswith(".wav"):
         raise HTTPException(400, "Fichier .wav requis")
     data = await file.read()
     params = {"families": families} if families else None
     async with httpx.AsyncClient(timeout=300) as client:
+        await _require_prompt(client, instruction)
         r = await client.post(f"{AUDIO}/predict_all", params=params,
                               files={"file": (file.filename, data, "audio/wav")})
         if r.status_code >= 400:
@@ -706,12 +744,17 @@ async def analyze_all_report_stream(
 
 
 @app.post("/predict_one")
-async def predict_one(file: UploadFile = File(...), family: str = "svm"):
-    """Proxy vers audio-engine /predict_one : un seul algorithme (svm | tree | cnn)."""
+async def predict_one(
+    file: UploadFile = File(...),
+    family: str = "svm",
+    instruction: str = Form(DEFAULT_INSTRUCTION),
+):
+    """Un seul algorithme (svm | tree | cnn), uniquement après validation du prompt."""
     if not file.filename.lower().endswith(".wav"):
         raise HTTPException(400, "Fichier .wav requis")
     data = await file.read()
     async with httpx.AsyncClient(timeout=300) as client:
+        await _require_prompt(client, instruction)
         r = await client.post(f"{AUDIO}/predict_one", params={"family": family},
                               files={"file": (file.filename, data, "audio/wav")})
         if r.status_code >= 400:

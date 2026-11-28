@@ -100,6 +100,19 @@ def test_racine_liste_les_endpoints():
     assert body["service"] == "CardioAgent-Ops API Gateway"
     assert "/analyze" in body["endpoints"]
     assert "/analyze_pcg" in body["endpoints"]
+    assert "/check_prompt" in body["endpoints"]
+
+
+def test_check_prompt_proxy(monkeypatch):
+    calls = install_transport(monkeypatch, lambda method, url, kwargs: FakeResponse({}))
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/check_prompt", json={"instruction": "Analyse ce signal cardiaque."}
+        )
+    assert response.status_code == 200
+    assert response.json() == PROMPT_OK
+    assert [call[1] for call in calls] == [f"{gateway.ORCH}/check_prompt"]
+    assert calls[0][2]["json"] == {"instruction": "Analyse ce signal cardiaque."}
 
 
 def test_health_agrege_les_trois_services(monkeypatch):
@@ -187,9 +200,11 @@ def test_analyze_pcg_enchaine_audio_puis_orchestrateur(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == audited
-    assert [call[1] for call in calls] == [f"{gateway.AUDIO}/predict", f"{gateway.ORCH}/analyze"]
-    assert calls[0][2]["files"]["file"][0] == "souffle.wav"
-    assert calls[1][2]["json"] == prediction
+    assert [call[1] for call in calls] == [
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict", f"{gateway.ORCH}/analyze"
+    ]
+    assert calls[1][2]["files"]["file"][0] == "souffle.wav"
+    assert calls[2][2]["json"] == prediction
 
 
 def test_analyze_pcg_erreur_audio(monkeypatch):
@@ -211,7 +226,9 @@ def test_predict_proxy_et_validation(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["prediction"] == "normal"
-    assert calls[0][1] == f"{gateway.AUDIO}/predict"
+    assert [call[1] for call in calls] == [
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict"
+    ]
 
 
 def test_analyze_all_transmet_les_familles(monkeypatch):
@@ -220,8 +237,10 @@ def test_analyze_all_transmet_les_familles(monkeypatch):
         response = client.post("/analyze_all?families=svm,tree",
                                files={"file": ("x.wav", b"RIFF", "audio/wav")})
     assert response.status_code == 200
-    assert calls[0][1] == f"{gateway.AUDIO}/predict_all"
-    assert calls[0][2]["params"] == {"families": "svm,tree"}
+    assert [call[1] for call in calls] == [
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict_all"
+    ]
+    assert calls[1][2]["params"] == {"families": "svm,tree"}
 
 
 def test_predict_one_famille_par_defaut(monkeypatch):
@@ -229,8 +248,47 @@ def test_predict_one_famille_par_defaut(monkeypatch):
     with TestClient(gateway.app) as client:
         response = client.post("/predict_one", files={"file": ("x.wav", b"RIFF", "audio/wav")})
     assert response.status_code == 200
-    assert calls[0][1] == f"{gateway.AUDIO}/predict_one"
-    assert calls[0][2]["params"] == {"family": "svm"}
+    assert [call[1] for call in calls] == [
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict_one"
+    ]
+    assert calls[1][2]["params"] == {"family": "svm"}
+
+
+PROMPT_REJETE = {
+    "relevant": False, "language": "fr", "intent": "out_of_scope",
+    "reason": "out_of_scope",
+    "message": "Cette demande n’est pas liée au domaine du système. Reformulez votre prompt.",
+}
+
+
+@pytest.mark.parametrize(
+    "route", ["/predict", "/analyze_all", "/predict_one", "/analyze_pcg"]
+)
+def test_prediction_directe_bloquee_si_prompt_hors_domaine(monkeypatch, route):
+    calls = install_transport(
+        monkeypatch,
+        lambda method, url, kwargs: FakeResponse({"analysis": [], "prediction": "normal"}),
+        prompt_check=PROMPT_REJETE,
+    )
+    with TestClient(gateway.app) as client:
+        response = client.post(route, files={"file": ("x.wav", b"RIFF", "audio/wav")})
+
+    assert response.status_code == 400
+    assert "Reformulez votre prompt" in response.json()["detail"]
+    assert [call[1] for call in calls] == [f"{gateway.ORCH}/check_prompt"]
+
+
+def test_prediction_sans_instruction_bloquee(monkeypatch):
+    calls = install_transport(monkeypatch, lambda method, url, kwargs: FakeResponse({}))
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all",
+            files={"file": ("x.wav", b"RIFF", "audio/wav")},
+            data={"instruction": "   "},
+        )
+    assert response.status_code == 400
+    assert "instruction est requise" in response.json()["detail"]
+    assert calls == []
 
 
 def test_models_indisponible(monkeypatch):

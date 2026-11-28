@@ -96,7 +96,12 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
   demande ni diagnostic, ni prescription, ni gestion d'urgence. Elle n'effectue aucun appel
   RAG, LLM ou audio-engine. Si le prompt est rejeté, le workflow s'arrête immédiatement avec
   un message FR/EN invitant à reformuler ; `/predict_all` n'est jamais appelé. La route
-  non diffusée `/analyze_all_report` applique la même règle.
+  non diffusée `/analyze_all_report` applique la même règle. Côté interface, une erreur de
+  validation annule tout repli vers `/predict_all` ; si les routes de rapport sont absentes,
+  un appel explicite à `/check_prompt` est exigé avant toute prédiction brute. La validation
+  est aussi imposée côté passerelle sur `/predict`, `/analyze_all`, `/predict_one` et
+  `/analyze_pcg` : aucune de ces routes ne peut déclencher l'audio-engine avec un prompt
+  hors domaine, vide ou indisponible.
 - **Workflow temps réel (SSE)** : `POST /analyze_all_report/stream` diffuse les événements
   `step` (service, statut `running` / `ok` / `erreur`, détail), `error`, `result` et `status`.
   La gateway émet ses propres étapes autour des appels réels à `/predict_all` et relaie les
@@ -115,7 +120,7 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
 
 ## 5. Jalon 6 — Tests continus
 
-- **140 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
+- **146 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
   avec faux ONNX), `tests/test_api.py` (proxys gateway avec `httpx` factice),
   `tests/test_agents.py` (graphe, garde-fous FR/EN, audit) et `tests/test_rag.py` (chunking,
   Qdrant mémoire, évaluation).

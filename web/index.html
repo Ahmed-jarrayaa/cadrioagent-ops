@@ -1493,6 +1493,11 @@ if ('ResizeObserver' in window) {
 
 /* ---------- Prédiction via les API existantes ---------- */
 class UserError extends Error {}
+function blockedUserError(message){
+  const error = new UserError(message);
+  error.workflowBlocked = true;
+  return error;
+}
 function detailText(detail){
   if (typeof detail === 'string') return detail;
   if (Array.isArray(detail)) return detail.map(item => item && item.msg ? item.msg : JSON.stringify(item)).join(' · ');
@@ -1515,7 +1520,7 @@ function orderedCandidates(){
   if (state.service) return [state.service, ...all.filter(c => c.base !== state.service.base)];
   return all;
 }
-async function requestPrediction(file){
+async function requestPrediction(file, instruction){
   const errors = [];
   for (const candidate of orderedCandidates()) {
     for (const path of candidate.predictPaths) {
@@ -1523,6 +1528,7 @@ async function requestPrediction(file){
       try {
         const form = new FormData();
         form.append('file', file, file.name);
+        form.append('instruction', instruction);
         const response = await fetchWithTimeout(url, {method:'POST', body:form}, 300000);
         const body = await readResponse(response);
         if (!response.ok) {
@@ -1654,7 +1660,9 @@ async function requestReportStream(file, instruction, onStatus){
       if (response.status === 404 || response.status === 405) return null;
       if (!response.ok) {
         const body = await readResponse(response);
-        throw new UserError(detailText(errorDetail(body, 'HTTP ' + response.status)) || ('Erreur HTTP ' + response.status));
+        const message = detailText(errorDetail(body, 'HTTP ' + response.status)) || ('Erreur HTTP ' + response.status);
+        throw response.status >= 400 && response.status < 500
+          ? blockedUserError(message) : new UserError(message);
       }
       if (!response.body || typeof response.body.getReader !== 'function') return null;
       const reader = response.body.getReader();
@@ -1680,7 +1688,7 @@ async function requestReportStream(file, instruction, onStatus){
       buffer += decoder.decode();
       if (buffer.trim()) parseSseBlock(buffer, handle);
       if (state.streamedError) {
-        throw new UserError(detailText(state.streamedError.detail) || 'Le workflow a été interrompu.');
+        throw blockedUserError(detailText(state.streamedError.detail) || 'Le workflow a été interrompu.');
       }
       const result = state.streamedReport;
       if (!result || !Array.isArray(result.workflow) || result.workflow.analysis.length !== 5) {
@@ -1711,7 +1719,9 @@ async function requestReport(file, instruction){
           errors.push(`${base} : endpoint rapport indisponible`);
           continue;
         }
-        throw new UserError(detail || ('Erreur HTTP ' + response.status));
+        const message = detail || ('Erreur HTTP ' + response.status);
+        throw response.status >= 400 && response.status < 500
+          ? blockedUserError(message) : new UserError(message);
       }
       const workflow = body && body.workflow;
       if (!workflow || !Array.isArray(workflow.analysis) || workflow.analysis.length !== 5) {
@@ -1725,6 +1735,24 @@ async function requestReport(file, instruction){
     }
   }
   throw new Error(errors.length ? errors.join('\n') : 'Aucun service de rapport disponible.');
+}
+async function validatePrompt(instruction){
+  for (const base of reportBases()) {
+    try {
+      const response = await fetchWithTimeout(base + '/check_prompt', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({instruction})
+      }, 15000);
+      if (response.status === 404 || response.status === 405) continue;
+      const body = await readResponse(response);
+      if (!response.ok) {
+        return {ok:false, message:detailText(errorDetail(body, 'Validation du prompt impossible.'))};
+      }
+      return {ok:body && body.relevant === true, message:(body && body.message) || ''};
+    } catch (error) { /* on essaie la base suivante */ }
+  }
+  return null;
 }
 function renderGeneratedReport(report, fallback, instruction){
   setHidden('generatedReport', false);
@@ -1763,6 +1791,16 @@ function renderGeneratedReport(report, fallback, instruction){
     <pre class="report-answer">${esc(report.answer || '')}</pre>
     ${sourcesHtml}`;
 }
+function renderBlockedPrompt(message, instruction){
+  setHidden('generatedReport', false);
+  setText('reportInstruction', 'Instruction saisie : « ' + instruction + ' »');
+  const badge = $('reportStatusBadge');
+  badge.classList.remove('is-success','is-warning','is-danger');
+  badge.classList.add('is-danger');
+  badge.textContent = 'Demande bloquée';
+  $('reportBody').innerHTML =
+    `<div class="report-unavailable">${esc(message)} Aucune prédiction n\u2019a été lancée.</div>`;
+}
 async function runPrediction(){
   if (!state.file || state.predicting) return;
   const file = state.file;
@@ -1771,11 +1809,33 @@ async function runPrediction(){
   setPredictingUI(true);
   setHidden('generatedReport', true);
   resetWorkflow();
+  let reportError = null;
+  const finishBlocked = () => {
+    setPredictingUI(false);
+    state.workflowDone = 'error';
+    renderWorkflow();
+    renderBlockedPrompt(reportError || 'Prompt non validé.', instruction);
+    setRunStatus(reportError || 'Prompt non validé.', 'error');
+    showToast(reportError || 'Reformulez votre prompt puis réessayez.');
+  };
   try {
     if (!state.service) await probeServices();
+
+    // Première étape : valider le prompt avant tout appel de prédiction.
+    applyWorkflowEvent({service:'api-gateway', status:'running', detail:'Validation de la pertinence du prompt'});
+    const verdict = await validatePrompt(instruction);
+    if (!verdict || verdict.ok !== true) {
+      reportError = verdict
+        ? (verdict.message || 'Le prompt n\u2019a pas été validé. Reformulez votre demande.')
+        : 'La validation du prompt est indisponible. Aucune prédiction n\u2019a été lancée.';
+      applyWorkflowEvent({service:'api-gateway', status:'erreur', detail:reportError});
+      finishBlocked();
+      return;
+    }
+    applyWorkflowEvent({service:'api-gateway', status:'ok', detail:'prompt validé'});
+
     let workflow = null;
     let report = null;
-    let reportError = null;
     try {
       const streamed = await requestReportStream(file, instruction, (event, data) => {
         if (event === 'step') applyWorkflowEvent(data);
@@ -1790,19 +1850,32 @@ async function runPrediction(){
       }
     } catch (error) {
       reportError = friendlyError(error);
+      if (error && error.workflowBlocked) {
+        applyWorkflowEvent({service:'api-gateway', status:'erreur', detail:reportError});
+        finishBlocked();
+        return;
+      }
       state.workflowDone = 'error';
       renderWorkflow();
     }
+
     if (!workflow) {
-      const result = await requestPrediction(file);
-      workflow = result.data;
-      if (!report) {
-        try {
-          const combined = await requestReport(file, instruction);
-          report = combined.body;
-        } catch (error) {
-          reportError = friendlyError(error);
+      try {
+        const combined = await requestReport(file, instruction);
+        report = combined.body;
+        workflow = combined.workflow;
+      } catch (error) {
+        reportError = friendlyError(error);
+        if (error && error.workflowBlocked) {
+          applyWorkflowEvent({service:'api-gateway', status:'erreur', detail:reportError});
+          finishBlocked();
+          return;
         }
+      }
+
+      if (!workflow) {
+        const result = await requestPrediction(file, instruction);
+        workflow = result.data;
       }
     }
     if (report && report.workflow_trace && state.workflowDone !== 'terminated') {

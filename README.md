@@ -563,6 +563,7 @@ Erreurs fréquentes :
 | `GET` | `/` | informations et liste des endpoints |
 | `GET` | `/health` | état de la gateway, de l'audio-engine, de l'orchestrateur et de MLflow |
 | `GET` | `/workflow/services` | état des 6 services traversés par le rapport |
+| `POST` | `/check_prompt` | proxy de validation du prompt avant toute prédiction |
 | `POST` | `/predict` | proxy direct vers l'audio-engine `/predict` (ONNX) |
 | `POST` | `/analyze_all?families=svm,tree,cnn,tl,hybrid` | proxy vers `/predict_all` |
 | `POST` | `/analyze_all_report` | **5 modèles obligatoires puis rapport** (`file` + `instruction`) |
@@ -698,8 +699,12 @@ Fonctionnement :
 - le panneau de progression des 6 services est placé **juste sous la zone d'upload**, avant
   les résultats, pour voir la validation et l'exécution dès le lancement ;
 - appel de `/analyze_all_report/stream` (gateway) : les 5 modèles reçoivent le même signal
-  prétraité, puis l'agent rédige le rapport ; repli sur `/analyze_all_report`, `/analyze_all`
-  ou `/predict_all` si le flux n'est pas disponible ;
+  prétraité, puis l'agent rédige le rapport ; repli sur `/analyze_all_report` puis, seulement
+  après validation explicite du prompt, sur `/analyze_all` / `/predict_all` ; un prompt refusé
+  n'entraîne jamais de repli vers une prédiction brute ;
+- la validation est également appliquée par la passerelle sur les routes directes
+  `/predict`, `/analyze_all`, `/predict_one` et `/analyze_pcg` : un mauvais prompt bloque
+  l'appel à l'audio-engine, même sans passer par l'interface ;
 - affichage des cinq cartes de résultats, du **consensus**, des divergences, des métriques de
   référence et des détails techniques (probabilités par segment, caractéristiques moyennes) ;
 - panneau **Rapport généré** : prédictions, classification globale, scores, caractéristiques,
