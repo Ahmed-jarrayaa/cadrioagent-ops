@@ -381,13 +381,28 @@ body::before{
 .instruction-block textarea{width:100%;min-height:76px;resize:vertical;padding:11px 12px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;color:var(--navy-900);font-family:inherit;font-size:.8rem;line-height:1.55}
 .instruction-block textarea:focus{outline:none;border-color:var(--petrol-600);box-shadow:0 0 0 3px var(--petrol-050)}
 .instruction-block small{color:var(--muted-2);font-size:.68rem;line-height:1.5}
-.chat-card,.report-card{display:flex;flex-direction:column;scroll-margin-top:86px}
+.chat-card{display:flex;flex-direction:column;scroll-margin-top:86px}
 .generated-report{margin-top:20px;scroll-margin-top:86px}
 .generated-report .card-head{align-items:flex-start}
 .report-instruction{margin:0 0 14px;padding:11px 13px;border:1px solid var(--petrol-100);border-radius:11px;background:var(--petrol-050);color:var(--ink-2);font-size:.78rem;line-height:1.6}
 .report-instruction strong{color:var(--petrol-700)}
 .report-answer{margin:0;padding:16px 18px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);color:var(--ink-2);font-size:.82rem;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;max-height:620px;overflow:auto}
 .report-unavailable{padding:16px 18px;border:1px dashed var(--warn-line);border-radius:13px;background:var(--warn-bg);color:var(--ink-2);font-size:.8rem;line-height:1.65}
+.workflow-panel{margin-top:20px;scroll-margin-top:86px}
+.workflow-track{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+.workflow-node{position:relative;padding:14px 14px 13px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);overflow:hidden}
+.workflow-node::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line-strong)}
+.workflow-node.is-ok::after{background:#2f8f6b}
+.workflow-node.is-degraded::after,.workflow-node.is-sans_donnee::after,.workflow-node.is-non_sollicite::after{background:var(--warn)}
+.workflow-node.is-indisponible::after,.workflow-node.is-bloque::after{background:var(--danger)}
+.workflow-node-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.workflow-node-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--petrol-050);color:var(--petrol-700);font-size:.68rem;font-weight:800}
+.workflow-node-name{margin-left:6px;color:var(--navy-900);font-size:.78rem;font-weight:800;word-break:break-word}
+.workflow-node-status{margin-left:auto;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:.62rem;font-weight:800;white-space:nowrap}
+.workflow-node.is-ok .workflow-node-status{border-color:#b9e2d2;color:#217a5b;background:#f0faf6}
+.workflow-node.is-degraded .workflow-node-status,.workflow-node.is-sans_donnee .workflow-node-status{border-color:var(--warn-line);color:var(--warn);background:var(--warn-bg)}
+.workflow-node-step{margin:10px 0 4px;color:var(--ink-2);font-size:.73rem;font-weight:700;line-height:1.45}
+.workflow-node-detail{margin:0;color:var(--muted);font-size:.69rem;line-height:1.5;overflow-wrap:anywhere}
 .chat-log{display:grid;gap:12px;max-height:430px;overflow:auto;margin-top:16px;padding:3px 2px 3px 3px}
 .chat-empty{padding:26px 18px;text-align:center;border:1px dashed var(--line-strong);border-radius:14px;background:var(--surface-2);color:var(--muted);font-size:.8rem;line-height:1.65}
 .chat-msg{padding:13px 15px;border:1px solid var(--line);border-radius:14px;background:#fff}
@@ -405,14 +420,6 @@ body::before{
 .chat-form textarea{width:100%;min-height:84px;resize:vertical;padding:12px 13px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;color:var(--navy-900);font-family:inherit;font-size:.84rem;line-height:1.6}
 .chat-form textarea:focus{outline:none;border-color:var(--petrol-600);box-shadow:0 0 0 3px var(--petrol-050)}
 .chat-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.report-list{display:grid;gap:9px;margin-top:16px}
-.report-link{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink-2);text-decoration:none;font-size:.8rem;font-weight:650;transition:border-color .2s,transform .2s}
-.report-link:hover{border-color:var(--petrol-600);transform:translateY(-1px)}
-.report-link .icon{width:16px;height:16px;flex:0 0 auto;color:var(--petrol-600)}
-.report-link small{display:block;margin-top:2px;color:var(--muted-2);font-size:.68rem;font-weight:500}
-.report-summary{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
-.report-summary p{margin:0 0 9px;color:var(--muted);font-size:.76rem;line-height:1.6}
-
 /* ---------- Responsive ---------- */
 @media(max-width:1080px){
   .workspace{grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr)}
@@ -427,6 +434,7 @@ body::before{
   .action-card{position:static}
   .result-grid{grid-template-columns:1fr}
   .steps-grid{grid-template-columns:1fr}
+  .workflow-track{grid-template-columns:repeat(2,minmax(0,1fr))}
   .page{padding:22px 20px 44px}
   .topbar-inner{padding:12px 20px}
   .footer{padding:0 20px 22px}
@@ -467,6 +475,7 @@ body::before{
   .stage{height:220px}
   .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .model-grid{grid-template-columns:1fr}
+  .workflow-track{grid-template-columns:1fr}
   .global-card{padding:16px}
   .result-chips{gap:5px}
   .chip{font-size:.68rem}
@@ -521,7 +530,7 @@ body::before{
       <div class="topbar-actions">
         <nav class="nav-links" aria-label="Sections du projet">
           <a href="#chatSection">Chat RAG</a>
-          <a href="#reportSection">Rapport</a>
+          <a href="#workflowSection">Workflow</a>
         </nav>
         <button type="button" class="service-chip is-checking" id="serviceChip" title="Vérifier la connexion au service d'analyse">
           <span class="status-dot" aria-hidden="true"></span>
@@ -542,8 +551,8 @@ body::before{
       <div class="hero-content">
         <div class="hero-copy">
           <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-pulse"></use></svg>Phonocardiographie · Aide à l'analyse</span>
-          <h1>Un signal cardiaque.<br><em>Trois modèles. Une lecture claire.</em></h1>
-          <p>Importez un enregistrement WAV. Le SVM, l'arbre de décision et le CNN analysent le signal automatiquement. Vous obtenez un résultat consolidé, les probabilités de chaque modèle et des recommandations adaptées.</p>
+          <h1>Un signal cardiaque.<br><em>Cinq modèles. Une lecture claire.</em></h1>
+          <p>Importez un enregistrement WAV. SVM, arbre de décision, CNN, transfer learning et modèle hybride analysent le même signal. Vous obtenez le consensus, les probabilités de chaque modèle et un rapport appuyé sur les documents du projet.</p>
         </div>
         <ol class="stepper" aria-label="Étapes de l'analyse">
           <li class="step is-active" id="step1"><span class="step-num">1</span><span class="step-text"><strong>Importer</strong><small>Fichier WAV</small></span></li>
@@ -602,7 +611,7 @@ body::before{
           <div>
             <span class="section-kicker">Étape 2 · Prédiction</span>
             <h2 id="actionTitle">Lancer l'analyse</h2>
-            <p>Les trois modèles sont exécutés automatiquement sur le serveur.</p>
+            <p>Les cinq modèles sont exécutés automatiquement sur le serveur, puis le rapport est généré.</p>
           </div>
         </header>
         <div class="action-body">
@@ -626,6 +635,8 @@ body::before{
             <span class="model-chip"><span class="model-dot"></span>SVM</span>
             <span class="model-chip"><span class="model-dot"></span>Arbre de décision</span>
             <span class="model-chip"><span class="model-dot"></span>CNN</span>
+            <span class="model-chip"><span class="model-dot"></span>Transfer learning</span>
+            <span class="model-chip"><span class="model-dot"></span>Hybride</span>
           </div>
           <div class="loading-bar" id="loadingBar" hidden><span></span></div>
           <div class="status-line" id="runStatus" role="status" aria-live="polite">
@@ -642,8 +653,8 @@ body::before{
       </div>
       <div class="steps-grid">
         <article class="step-card"><span class="step-badge">01</span><h3>Importez</h3><p>Déposez un fichier WAV ou parcourez vos fichiers. Le signal est affiché immédiatement, sans envoi préalable.</p></article>
-        <article class="step-card"><span class="step-badge">02</span><h3>Analyse croisée</h3><p>Un seul clic exécute le SVM, l'arbre de décision et le CNN. Aucun réglage technique n'est nécessaire.</p></article>
-        <article class="step-card"><span class="step-badge">03</span><h3>Résultat consolidé</h3><p>Consultez le consensus, les probabilités, les résultats individuels et les recommandations adaptées.</p></article>
+        <article class="step-card"><span class="step-badge">02</span><h3>Analyse croisée</h3><p>Un seul clic exécute les cinq modèles, puis l'agent compare les résultats et les documents du projet.</p></article>
+        <article class="step-card"><span class="step-badge">03</span><h3>Rapport documenté</h3><p>Consultez le consensus, les cinq résultats individuels et une conclusion appuyée sur les sources fournies.</p></article>
       </div>
     </section>
 
@@ -652,7 +663,7 @@ body::before{
         <div>
           <span class="section-kicker">Analyse terminée</span>
           <h2 id="resultsTitle">Résultats de l'analyse</h2>
-          <p id="resultsSubtitle">Synthèse des trois modèles pour le signal chargé.</p>
+          <p id="resultsSubtitle">Synthèse des cinq modèles pour le signal chargé.</p>
         </div>
         <span class="result-time" id="resultTime"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg><span>—</span></span>
       </header>
@@ -749,37 +760,19 @@ body::before{
         <p class="disclaimer" style="margin-top:14px"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg><span><strong>Information pédagogique.</strong> L'assistant ne pose pas de diagnostic et ne prescrit aucun traitement. En cas d'urgence, contactez les services médicaux.</span></p>
       </article>
 
-      <article class="card report-card" id="reportSection">
-        <header class="card-head">
-          <div>
-            <span class="section-kicker">Jalons 3 à 8 · Preuves</span>
-            <h2 id="reportTitle">Rapport & preuves</h2>
-            <p>Rapport consolidé, évaluations indépendantes et preuves d'exécution du projet.</p>
-          </div>
-          <svg class="icon" aria-hidden="true" style="width:18px;height:18px;color:var(--petrol-600)"><use href="#i-file"></use></svg>
-        </header>
+    </section>
 
-        <div class="report-summary" style="margin-top:0;padding-top:0;border-top:0">
-          <div class="tech-grid">
-            <div class="tech-item"><span>Tests</span><strong>125 réussis</strong></div>
-            <div class="tech-item"><span>RAG</span><strong>66 passages · 6/6</strong></div>
-            <div class="tech-item"><span>Agents</span><strong>8/8 audits</strong></div>
-            <div class="tech-item"><span>Couverture</span><strong>55 % globale</strong></div>
-          </div>
+    <section class="card workflow-panel" id="workflowSection" aria-labelledby="workflowTitle">
+      <header class="card-head">
+        <div>
+          <span class="section-kicker">Passage du workflow · 6 services</span>
+          <h2 id="workflowTitle">Traçabilité de l'analyse</h2>
+          <p>État réel des services traversés : passerelle, moteur audio, métadonnées des modèles, agents, recherche documentaire et LLM.</p>
         </div>
-
-        <nav class="report-list" aria-label="Rapports du projet">
-          <a class="report-link" data-file="RAPPORT_TECHNIQUE.md" href="#"><span>Rapport technique consolidé<small>Jalons 1 à 8 · synthèse et limites</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-          <a class="report-link" data-file="llm_finetuning/reports/local_1_5b_delivery.md" href="#"><span>Livraison LLM 1.5B<small>QLoRA, GGUF, Ollama, MLflow</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-          <a class="report-link" data-file="llm_finetuning/reports/local_1_5b_evaluation.md" href="#"><span>Évaluation LLM indépendante<small>Base vs fine-tuné · jeu de test 70</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-          <a class="report-link" data-file="rag_engine/reports/rag_evaluation.json" href="#"><span>Évaluation RAG<small>6 questions · sources et scores</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-          <a class="report-link" data-file="agents/reports/agent_smoke_1_5b.md" href="#"><span>Smoke tests multi-agents<small>8 scénarios · garde-fous et audit</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-          <a class="report-link" data-file="reports/coverage.txt" href="#"><span>Couverture des tests<small>55 % globale · 125 tests</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-          <a class="report-link" data-api-docs="1" href="#"><span>API interactive (Swagger)<small>/analyze · /analyze_all · /health</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
-        </nav>
-
-        <p class="quality-note">Ces liens supposent l'interface servie depuis la racine du dépôt (par exemple <span class="mono">python -m http.server 5501</span>). Les fichiers sont ouverts dans un nouvel onglet.</p>
-      </article>
+        <span class="consensus-badge" id="workflowBadge">—</span>
+      </header>
+      <div class="workflow-track" id="workflowTrack" aria-live="polite"></div>
+      <p class="quality-note">Les durées et statuts affichés après une analyse proviennent de la réponse de la passerelle. Avant analyse, l'état est relevé via <span class="mono">/workflow/services</span>.</p>
     </section>
 
     <section class="card generated-report" id="generatedReport" hidden aria-labelledby="generatedReportTitle">
@@ -893,7 +886,7 @@ function updateActionState(){
   if (!ready) {
     setText('actionNote', 'Importez d\u2019abord un fichier WAV pour activer l\u2019analyse.');
   } else if (state.service) {
-    setText('actionNote', 'Les trois modèles seront exécutés automatiquement sur le serveur.');
+    setText('actionNote', 'Les cinq modèles seront exécutés automatiquement sur le serveur.');
   } else {
     setText('actionNote', 'Le service sera reconnecté automatiquement au lancement de l\u2019analyse.');
   }
@@ -1570,6 +1563,76 @@ function reportBases(){
   }
   return bases.filter((base, index, all) => all.indexOf(base) === index);
 }
+const WORKFLOW_SERVICES = [
+  {key:'api-gateway', label:'api-gateway', step:'Réception WAV + instruction'},
+  {key:'audio-engine', label:'audio-engine', step:'Prétraitement + 5 prédictions'},
+  {key:'mlflow-server', label:'mlflow-server', step:'Métadonnées des modèles'},
+  {key:'agent-orchestrator', label:'agent-orchestrator', step:'Agent rapport (3 nœuds)'},
+  {key:'vector-db', label:'vector-db', step:'Passages RAG (cardio_docs)'},
+  {key:'llm-server', label:'llm-server', step:'Confirmation bornée'}
+];
+function workflowLabel(status){
+  const labels = {
+    ok:'OK', degrade:'Dégradé', indisponible:'Indisponible', bloque:'Bloqué',
+    sans_donnee:'Sans donnée', non_sollicite:'Non sollicité', inconnu:'Inconnu',
+    attente:'En attente', down:'Indisponible', checking:'Vérification'
+  };
+  return labels[status] || status || '—';
+}
+function renderWorkflow(trace, snapshot){
+  const rows = {};
+  for (const service of (snapshot && snapshot.services) ? Object.keys(snapshot.services) : []) {
+    rows[service] = snapshot.services[service];
+  }
+  for (const item of (Array.isArray(trace) ? trace : [])) rows[item.service] = item;
+  const track = $('workflowTrack');
+  if (!track) return;
+  track.innerHTML = WORKFLOW_SERVICES.map((service, index) => {
+    const row = rows[service.key] || {};
+    const status = String(row.status || 'attente');
+    const cls = status === 'ok' ? 'is-ok'
+      : /^(degrade|sans_donnee|non_sollicite|inconnu|checking)$/.test(status) ? 'is-degraded'
+      : /^(indisponible|bloque|down)$/.test(status) ? 'is-indisponible' : '';
+    const detail = row.detail || (row.points != null ? row.points + ' passages · ' + (row.collection || 'cardio_docs')
+      : row.model ? String(row.model)
+      : row.http != null ? 'HTTP ' + row.http
+      : row.error ? String(row.error)
+      : 'Statut relevé avant analyse');
+    const duration = row.duration_ms != null ? ' · ' + esc(fmt(Number(row.duration_ms), 0)) + ' ms' : '';
+    return `<article class="workflow-node ${cls}">
+      <div class="workflow-node-head"><span class="workflow-node-num">${index + 1}</span><span class="workflow-node-name">${esc(service.label)}</span><span class="workflow-node-status">${esc(workflowLabel(status))}</span></div>
+      <p class="workflow-node-step">${esc(service.step)}</p>
+      <p class="workflow-node-detail">${esc(String(detail))}${duration}</p>
+    </article>`;
+  }).join('');
+  const badge = $('workflowBadge');
+  if (!badge) return;
+  badge.classList.remove('is-success','is-warning','is-danger');
+  if (Array.isArray(trace)) {
+    const ok = trace.filter(item => item.status === 'ok').length;
+    badge.classList.add(ok === trace.length ? 'is-success' : 'is-warning');
+    badge.textContent = ok + '/' + trace.length + ' services';
+  } else if (snapshot) {
+    badge.classList.add('is-warning');
+    badge.textContent = 'État relevé';
+  } else {
+    badge.textContent = 'En attente';
+  }
+}
+async function loadWorkflowStatus(){
+  for (const base of reportBases()) {
+    try {
+      const response = await fetchWithTimeout(base + '/workflow/services', {}, 15000);
+      const body = await readResponse(response);
+      if (response.ok && body && body.services) {
+        renderWorkflow(null, body);
+        return body;
+      }
+    } catch (error) { /* on essaie la base suivante */ }
+  }
+  renderWorkflow(null);
+  return null;
+}
 async function requestReport(file, instruction){
   const errors = [];
   for (const base of reportBases()) {
@@ -1623,6 +1686,7 @@ function renderGeneratedReport(report, fallback, instruction){
     `<span class="chip is-success">${modelsOk}/${modelsTotal} modèles exécutés</span>`,
     `<span class="chip">${esc(String(report.model || 'agent-rapport'))}</span>`
   ];
+  if (audit.citations > 0) chips.push('<span class="chip is-success">Conclusion documentée</span>');
   if (audit.passed) chips.push('<span class="chip is-success">Audit OK</span>');
   else if (audit.issues && audit.issues.length) chips.push('<span class="chip is-warning">' + esc(plural(audit.issues.length, 'réserve')) + '</span>');
   if (audit.warnings && audit.warnings.length) chips.push('<span class="chip is-warning">' + esc(plural(audit.warnings.length, 'avertissement')) + '</span>');
@@ -1644,6 +1708,7 @@ async function runPrediction(){
   clearFileError();
   setPredictingUI(true);
   setHidden('generatedReport', true);
+  await loadWorkflowStatus().catch(() => {});
   try {
     if (!state.service) await probeServices();
     let workflow = null;
@@ -1661,6 +1726,7 @@ async function runPrediction(){
       workflow = result.data;
     }
     renderResults(workflow);
+    renderWorkflow(report && report.workflow_trace ? report.workflow_trace : null);
     renderGeneratedReport(report, reportError, instruction);
     setPredictingUI(false);
     setRunStatus(report
@@ -1999,10 +2065,6 @@ function renderResults(data){
   setStep(3);
 }
 /* ---------- Chat RAG et rapports ---------- */
-function rootUrl(){
-  const path = location.pathname.replace(/\/+$/, '');
-  return new URL(path.endsWith('/web') ? '../' : './', location.href).href;
-}
 function chatBase(){
   if (state.service) {
     const body = state.serviceHealth && state.serviceHealth.body;
@@ -2012,22 +2074,6 @@ function chatBase(){
   }
   const gateway = (state.candidates || []).find(candidate => candidate.kind === 'gateway');
   return gateway ? gateway.base : (location.protocol.startsWith('http') ? location.origin : 'http://127.0.0.1:8085');
-}
-function setupReportLinks(){
-  document.querySelectorAll('.report-link').forEach(link => {
-    link.target = '_blank';
-    link.rel = 'noopener';
-    const file = link.getAttribute('data-file');
-    if (file) {
-      link.href = rootUrl() + file;
-    } else if (link.hasAttribute('data-api-docs')) {
-      link.href = '#';
-      link.addEventListener('click', event => {
-        event.preventDefault();
-        window.open(chatBase() + '/docs', '_blank', 'noopener');
-      });
-    }
-  });
 }
 function setChatState(kind, text){
   const badge = $('chatStateBadge');
@@ -2136,7 +2182,7 @@ function setupChat(){
       }
     });
   }
-  setupReportLinks();
+  renderWorkflow(null);
 }
 
 function init(){
@@ -2146,6 +2192,7 @@ function init(){
   setRunStatus('Prêt à analyser un signal.', 'info');
   setupChat();
   probeServices();
+  loadWorkflowStatus().catch(() => {});
   window.addEventListener('load', () => { drawBase(); drawOverlay(); });
   window.addEventListener('focus', () => {
     if (!state.service && !state.probing) probeServices();

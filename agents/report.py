@@ -1,8 +1,10 @@
 """Construction du rapport à partir des résultats réels du workflow 5 modèles.
 
 Aucune valeur n'est inventée ici : les sections factuelles sont dérivées du JSON
-renvoyé par ``audio_engine.registry.analyze``. Le LLM ne rédige que
-l'interprétation et la conclusion, à partir de ces faits et des passages RAG.
+renvoyé par ``audio_engine.registry.analyze``. La conclusion met en regard ces
+faits et un passage réellement récupéré dans les deux documents du projet. Le
+LLM est limité à une confirmation structurée ; toute instruction hors contexte
+est bloquée avant tout appel LLM.
 """
 
 from __future__ import annotations
@@ -12,6 +14,40 @@ import re
 from typing import Any
 
 MODEL_KEYS = ("svm", "tree", "cnn", "tl", "hybrid")
+
+# Mots qui autorisent une instruction dans le périmètre du rapport. Une demande
+# qui n'en contient aucun est bloquée avant tout appel au LLM.
+IN_SCOPE_TERMS = {
+    "signal", "signaux", "cardiaque", "coeur", "cœur", "pcg", "ecg", "auscultation",
+    "bruit", "bruits", "souffle", "systole", "diastole", "b1", "b2", "valve", "valves",
+    "rapport", "analyse", "analyser", "resultat", "resultats", "prediction", "predictions",
+    "modele", "modeles", "score", "scores", "probabilite", "probabilites", "seuil",
+    "seuils", "caracteristique", "caracteristiques", "classification", "classe",
+    "consensus", "vote", "votes", "divergence", "divergences", "document", "documents",
+    "source", "sources", "conclusion", "explication", "expliquer", "detail", "detalles",
+    "etat", "evaluer", "evaluation", "depistage", "normal", "anormal", "anomalie",
+    "abnormal", "heart", "sound", "sounds", "model", "models", "report", "result",
+    "results", "feature", "features", "analysis", "classify", "screening",
+}
+
+OUT_OF_SCOPE_MARKERS = re.compile(
+    r"recette|gateau|gâteau|meteo|météo|football|politique|achat|prix|voyage|"
+    r"devinette|blague|poeme|poème|roman|immobilier|bourse|cryptomonnaie|"
+    r"code postal|heure exacte",
+    flags=re.IGNORECASE,
+)
+
+
+def _instruction_tokens(text: str) -> set[str]:
+    return set(re.findall(r"[a-zàâçéèêëîïôûùüÿœ0-9]+", (text or "").lower()))
+
+
+def is_instruction_in_context(instruction: str) -> bool:
+    """Vrai si l'instruction porte sur le signal, les modèles ou les documents."""
+    text = (instruction or "").strip()
+    if not text or OUT_OF_SCOPE_MARKERS.search(text):
+        return False
+    return bool(_instruction_tokens(text) & IN_SCOPE_TERMS)
 
 
 def _fmt(value: Any, digits: int = 3) -> str:
@@ -227,6 +263,49 @@ def deterministic_interpretation(workflow: dict[str, Any] | None, language: str)
             "or a healthcare professional's advice, and it is not validated for ECG. "
         )
     return first + second
+
+
+def document_conclusion(
+    workflow: dict[str, Any] | None,
+    results: list[dict[str, Any]] | None,
+    language: str,
+    instruction: str,
+) -> str:
+    """Conclusion adossée à un passage réellement récupéré dans les documents.
+
+    Le passage est cité verbatim (tronqué au mot le plus proche) : aucune
+    affirmation médicale n'est produite par le service, seulement une mise en
+    regard entre le vote des modèles et la description documentaire.
+    """
+    if not results:
+        return deterministic_conclusion(workflow, language, instruction)
+    workflow = workflow or {}
+    consensus = workflow.get("consensus") or {}
+    prediction = consensus.get("prediction") or "indéterminé"
+    models_ok = consensus.get("models_ok", "?")
+    models_total = consensus.get("models_total", "?")
+    first = results[0] or {}
+    raw = re.sub(r"\s+", " ", str(first.get("text") or "")).strip()
+    if len(raw) > 260:
+        raw = raw[:260].rsplit(" ", 1)[0] + "…"
+    source = first.get("source_id") or first.get("source") or "document du projet"
+    instruction = (instruction or "").strip()
+    if language == "en":
+        return (
+            f"Conclusion [1]: for the request \"{instruction}\", the supplied document "
+            f"\"{source}\" states: \"{raw}\". The available models ({models_ok}/{models_total}) "
+            f"class this signal as '{prediction}'. This comparison is educational, is not "
+            "validated for ECG and is not a diagnosis; consult a healthcare professional "
+            "for any health decision."
+        )
+    return (
+        f"Conclusion [1] : pour l'instruction « {instruction} », le document fourni "
+        f"« {source} » indique : « {raw} ». Le vote des modèles disponibles "
+        f"({models_ok}/{models_total}) ordonne ce signal dans la classe « {prediction} ». "
+        "Cette mise en regard est pédagogique, n'est pas validée pour un ECG et ne "
+        "constitue pas un diagnostic ; consultez un professionnel de santé pour toute "
+        "décision de santé."
+    )
 
 
 def deterministic_conclusion(

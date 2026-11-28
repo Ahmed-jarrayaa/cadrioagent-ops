@@ -23,7 +23,9 @@ from agents.prompts import (
 from agents.report import (
     deterministic_conclusion,
     deterministic_interpretation,
+    document_conclusion,
     factual_report,
+    is_instruction_in_context,
     structured_confirmation_matches,
     workflow_summary,
 )
@@ -195,10 +197,16 @@ def analyste_node(state: AnalysisState) -> dict[str, Any]:
         language = "fr"
     mode = state.get("mode", "chat")
     if mode == "report":
-        # L'instruction garde sa classification de sécurité, mais la documentation
-        # recherchée porte sur le dépistage, pas sur les chiffres du workflow.
+        # Sécurité d'abord : diagnostic, prescription et urgence restent refusés.
+        # Ensuite, une instruction sans lien avec le signal, les modèles ou les
+        # documents est bloquée avant tout appel au LLM (prompt injection).
         detected = classify_intent(question)
-        intent = detected if detected != "knowledge" else "report"
+        if detected != "knowledge":
+            intent = detected
+        elif not is_instruction_in_context(question):
+            intent = "out_of_scope"
+        else:
+            intent = "report"
         retrieval_query = AUDIO_QUERY[language]
     elif state.get("audio") and state.get("audio_prompt"):
         # Question générée à partir d'un score : information de dépistage, jamais un diagnostic.
@@ -220,7 +228,7 @@ def analyste_node(state: AnalysisState) -> dict[str, Any]:
 def report_cardiologue_node(
     state: AnalysisState, retriever: Retriever, llm: LLM, settings: Settings
 ) -> dict[str, Any]:
-    """Agent 2 (mode rapport) : faits du workflow + interprétation LLM bornée."""
+    """Agent 2 (mode rapport) : faits réels, passage RAG et conclusion documentée."""
     language = state.get("language", "fr")
     workflow = state.get("workflow") or {}
     instruction = state.get("question") or ""
@@ -246,25 +254,36 @@ def report_cardiologue_node(
     elif not issues:
         warnings.append("report_without_passages")
 
+    status = "ok" if context and not issues else "degraded"
     if context and not issues:
         prompt = build_report_prompt(instruction, facts, context, language)
-        interpretation = deterministic_interpretation(workflow, language)
         try:
             confirmation = llm.generate(prompt, report_system_prompt(language))
-            if structured_confirmation_matches(confirmation, workflow):
-                status = "ok"
-            else:
+            if "OUT_OF_CONTEXT" in (confirmation or "").upper():
+                message = canonical_answer(language, "out_of_scope")
+                warnings.append("llm_out_of_context")
+                return {
+                    "answer": message,
+                    "draft_answer": message,
+                    "status": "refused",
+                    "results": results,
+                    "context": context,
+                    "grounded": False,
+                    "citations": 0,
+                    "issues": issues,
+                    "warnings": warnings,
+                    "refusal_applied": True,
+                    "workflow_summary": summary,
+                }
+            if not structured_confirmation_matches(confirmation, workflow):
                 status = "degraded"
                 warnings.append("llm_confirmation_rejected")
         except Exception as error:
-            interpretation = deterministic_interpretation(workflow, language)
             status = "degraded"
             issues.append(f"llm_unavailable:{type(error).__name__}")
-    else:
-        interpretation = deterministic_interpretation(workflow, language)
-        status = "degraded"
 
-    conclusion = deterministic_conclusion(workflow, language, instruction)
+    interpretation = deterministic_interpretation(workflow, language)
+    conclusion = document_conclusion(workflow, results, language, instruction)
     answer = f"{facts}\n\n{interpretation}\n\n{conclusion}"
     grounding_context = "\n\n".join(part for part in (context, facts, summary) if part)
     return {
@@ -273,7 +292,7 @@ def report_cardiologue_node(
         "status": status,
         "results": results,
         "context": grounding_context,
-        "grounded": is_grounded(interpretation, grounding_context),
+        "grounded": is_grounded(answer, grounding_context),
         "citations": count_citations(answer),
         "issues": issues,
         "warnings": warnings,
@@ -288,7 +307,7 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
         language = state.get("language", "fr")
         intent = state.get("intent", "knowledge")
 
-        if intent in {"diagnosis", "prescription", "emergency"}:
+        if intent in {"diagnosis", "prescription", "emergency", "out_of_scope"}:
             message = canonical_answer(language, intent)
             return {
                 "answer": message,
@@ -371,7 +390,7 @@ def auditeur_node(state: AnalysisState) -> dict[str, Any]:
     warnings = list(state.get("warnings") or [])
     citations = count_citations(answer)
 
-    if intent in {"diagnosis", "prescription", "emergency"}:
+    if intent in {"diagnosis", "prescription", "emergency", "out_of_scope"}:
         expected = canonical_answer(language, intent)
         if not answer or answer == "":
             answer = expected

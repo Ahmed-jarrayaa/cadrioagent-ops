@@ -79,16 +79,23 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
   sont présentes dans la réponse, puis transmet un résumé des résultats réels à l'orchestrateur avec
   `mode=report`. L'agent construit les sections factuelles (prédictions, scores, seuils,
   caractéristiques, votes, divergences), l'interprétation et la conclusion à partir de ces seules
-  valeurs ; aucun chiffre n'est inventé. Le LLM est limité à une ligne structurée de confirmation
-  des faits ; si sa confirmation contredit le workflow, elle est rejetée
-  (`llm_confirmation_rejected`) et l'audit le signale. En cas d'indisponibilité du LLM, l'audit
-  signale `llm_unavailable` et le rapport reste disponible.
+  valeurs ; aucun chiffre n'est inventé. La conclusion met en regard le vote des modèles et un
+  passage réellement récupéré dans les deux documents (citation `[1]`). Le LLM est limité à une
+  ligne structurée de confirmation des faits ; une instruction hors périmètre est bloquée
+  avant l'appel (`intent=out_of_scope`) ; le LLM ne reçoit que des instructions déjà filtrées. Si la
+  confirmation contredit le workflow, elle est rejetée (`llm_confirmation_rejected`). En cas
+  d'indisponibilité du LLM, l'audit signale `llm_unavailable` et le rapport reste disponible.
+- **Traçabilité des 6 services** : `GET /workflow/services` expose l'état de `api-gateway`,
+  `audio-engine`, `mlflow-server`, `agent-orchestrator`, `vector-db` et `llm-server` (les deux
+  derniers via la santé de l'orchestrateur). La réponse de `/analyze_all_report` contient en plus
+  `workflow_trace` (statut, détail et durée mesurée pour chaque service). L'interface a supprimé
+  le panneau « Jalons 3 à 8 · Preuves » et affiche ce parcours à la place.
   L'interface affiche ce rapport après les cinq cartes de modèles. Les modèles restent validés sur
   des signaux PCG ; aucune validation ECG n'est revendiquée.
 
 ## 5. Jalon 6 — Tests continus
 
-- **125 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
+- **129 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
   avec faux ONNX), `tests/test_api.py` (proxys gateway avec `httpx` factice),
   `tests/test_agents.py` (graphe, garde-fous FR/EN, audit) et `tests/test_rag.py` (chunking,
   Qdrant mémoire, évaluation).

@@ -562,6 +562,7 @@ Erreurs fréquentes :
 |---|---|---|
 | `GET` | `/` | informations et liste des endpoints |
 | `GET` | `/health` | état de la gateway, de l'audio-engine, de l'orchestrateur et de MLflow |
+| `GET` | `/workflow/services` | état des 6 services traversés par le rapport |
 | `POST` | `/predict` | proxy direct vers l'audio-engine `/predict` (ONNX) |
 | `POST` | `/analyze_all?families=svm,tree,cnn,tl,hybrid` | proxy vers `/predict_all` |
 | `POST` | `/analyze_all_report` | **5 modèles obligatoires puis rapport** (`file` + `instruction`) |
@@ -690,12 +691,14 @@ Fonctionnement :
 - affichage des cinq cartes de résultats, du **consensus**, des divergences, des métriques de
   référence et des détails techniques (probabilités par segment, caractéristiques moyennes) ;
 - panneau **Rapport généré** : prédictions, classification globale, scores, caractéristiques,
-  comparaison, interprétation et conclusion répondant à l'instruction. Le rapport n'est produit
-  qu'après les 5 prédictions et n'invente aucune valeur ; les modèles sont validés sur PCG, pas ECG ;
+  comparaison, interprétation et conclusion documentée répondant à l'instruction. Le rapport n'est
+  produit qu'après les 5 prédictions et n'invente aucune valeur ; les modèles sont validés sur PCG,
+  pas ECG. Une instruction hors contexte est bloquée avant tout appel LLM ;
+- panneau **Workflow · 6 services** : état et durées réels du passage dans `api-gateway`,
+  `audio-engine`, `mlflow-server`, `agent-orchestrator`, `vector-db` et `llm-server`
+  (`GET /workflow/services` avant analyse, trace incluse dans la réponse de rapport) ;
 - panneau **Chat RAG** : questions via `POST /analyze`, réponses sourcées, audit, garde-fous et
-  refus déterministes affichés dans l'interface ;
-- panneau **Rapport & preuves** : liens vers `RAPPORT_TECHNIQUE.md`, les rapports LLM/RAG/agents,
-  la couverture et l'API interactive (`/docs`).
+  refus déterministes affichés dans l'interface.
 
 > L'API autorise toutes les origines (`CORS *`) : l'interface peut être ouverte depuis un autre
 > serveur local ou via `file://`.

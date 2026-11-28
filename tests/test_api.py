@@ -283,6 +283,48 @@ def test_analyze_all_report_enchaine_5_modeles_puis_agent(monkeypatch):
     assert payload["workflow"]["analysis"][0]["key"] == "svm"
     assert payload["prediction"] == "abnormal"
     assert payload["prob_abnormal"] == 0.5
+    trace = body["workflow_trace"]
+    assert [item["service"] for item in trace] == list(gateway.SERVICE_ORDER)
+    assert trace[1]["status"] in {"ok", "degrade"}
+    assert trace[4]["detail"] == "0 passage(s) utilisé(s)"
+    assert body["gateway_latency_ms"] >= 0
+
+
+def test_workflow_services_expose_les_six_services(monkeypatch):
+    def handler(method, url, kwargs):
+        if url.startswith(gateway.ORCH):
+            return FakeResponse({"services": {
+                "qdrant": {"status": "ok", "points": 66, "collection": "cardio_docs"},
+                "llm": {"status": "ok", "model": "cardio-llm"},
+            }})
+        return FakeResponse({"status": "ok"})
+
+    calls = install_transport(monkeypatch, handler)
+    with TestClient(gateway.app) as client:
+        body = client.get("/workflow/services").json()
+
+    assert body["order"] == list(gateway.SERVICE_ORDER)
+    assert set(body["services"]) == set(gateway.SERVICE_ORDER)
+    assert body["services"]["api-gateway"]["status"] == "ok"
+    assert body["services"]["vector-db"]["points"] == 66
+    assert body["services"]["llm-server"]["model"] == "cardio-llm"
+    assert len(calls) == 3
+
+
+def test_trace_indique_le_blocage_avant_rag_et_llm(monkeypatch):
+    refused = {"status": "refused", "intent": "out_of_scope", "answer": "hors contexte", "sources": []}
+    install_transport(monkeypatch, lambda method, url, kwargs: (
+        FakeResponse(WORKFLOW) if url.startswith(gateway.AUDIO) else FakeResponse(refused)
+    ))
+    with TestClient(gateway.app) as client:
+        body = client.post(
+            "/analyze_all_report",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+            data={"instruction": "Recette du gateau"},
+        ).json()
+    trace = {item["service"]: item for item in body["workflow_trace"]}
+    assert trace["vector-db"]["status"] == "bloque"
+    assert trace["llm-server"]["status"] == "bloque"
 
 
 def test_analyze_all_report_bloque_si_un_modele_manque(monkeypatch):

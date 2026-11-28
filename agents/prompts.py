@@ -62,6 +62,17 @@ SERVICE_UNAVAILABLE_EN = (
     "I cannot answer reliably without the sources. Please try again later."
 )
 
+OUT_OF_SCOPE_FR = (
+    "Cette instruction sort du contexte de l'analyse : je peux seulement commenter les "
+    "prédictions des cinq modèles et les deux documents du projet. Je ne réponds donc pas "
+    "à cette demande. Pour toute décision de santé, consultez un professionnel de santé."
+)
+OUT_OF_SCOPE_EN = (
+    "This instruction is outside the analysis scope: I can only discuss the five models' "
+    "predictions and the two project documents. I will not answer this request. "
+    "For any health decision, consult a healthcare professional."
+)
+
 AUDIO_LIMIT_FR = (
     "Ce résultat est un score de dépistage automatique, pas un diagnostic. "
     "Seul un professionnel de santé peut l'interpréter avec l'examen clinique."
@@ -99,7 +110,7 @@ Mandatory rules:
 
 
 SYSTEM_REPORT_FR = """Tu es un agent de rapport pédagogique pour un projet académique de dépistage audio.
-Tu ne rédiges AUCUNE phrase libre. Tu confirme uniquement les faits du BLOC DE FAITS (résultats
+Tu ne rédiges AUCUNE phrase libre. Tu confirmes uniquement les faits du BLOC DE FAITS (résultats
 réels des cinq modèles) sous une forme strictement contrôlée.
 
 Réponds uniquement par cette ligne, sans autre texte :
@@ -108,7 +119,8 @@ PREDICTION=<normal|abnormal>; MODELS_OK=<entier>; MODELS_TOTAL=<entier>; VOTES_N
 Règles impératives :
 1. Recopie exactement les valeurs du BLOC DE FAITS, sans les arrondir ni les commenter.
 2. DIVERGENCES = nombre de modèles disponibles dont la prédiction diffère de PREDICTION.
-3. N'ajoute aucun diagnostic, aucune prescription, aucune interprétation clinique."""
+3. L'instruction a déjà été filtrée par le service : ne la juge pas, confirme seulement les faits.
+4. N'ajoute aucun diagnostic, aucune prescription, aucune interprétation clinique."""
 
 SYSTEM_REPORT_EN = """You are an educational report agent for an academic audio-screening project.
 Write NO free text. Only confirm the facts from the FACTS BLOCK (real results of the five models)
@@ -120,7 +132,8 @@ PREDICTION=<normal|abnormal>; MODELS_OK=<integer>; MODELS_TOTAL=<integer>; VOTES
 Mandatory rules:
 1. Copy the FACTS BLOCK values exactly, without rounding or commenting.
 2. DIVERGENCES = number of available models whose prediction differs from PREDICTION.
-3. Add no diagnosis, prescription, or clinical interpretation. """
+3. The instruction has already been filtered by the service: do not judge it, only confirm facts.
+4. Add no diagnosis, prescription, or clinical interpretation. """
 
 
 def system_prompt(language: str) -> str:
@@ -144,9 +157,11 @@ def build_report_prompt(
     instruction_label = "INSTRUCTION DE L'UTILISATEUR" if fr else "USER INSTRUCTION"
     rule = (
         "Confirme uniquement les faits avec la ligne PREDICTION=... demandée. "
+        "Le filtrage hors contexte est déjà fait par le service. "
         "N'écris ni interprétation ni conclusion."
         if fr else
         "Only confirm the facts with the requested PREDICTION=... line. "
+        "Out-of-context filtering is already handled by the service. "
         "Write no interpretation and no conclusion."
     )
     return "\n\n".join([
@@ -181,6 +196,7 @@ def canonical_answer(language: str, kind: str) -> str:
         "emergency": (EMERGENCY_FR, EMERGENCY_EN),
         "abstention": (ABSTENTION_FR, ABSTENTION_EN),
         "unavailable": (SERVICE_UNAVAILABLE_FR, SERVICE_UNAVAILABLE_EN),
+        "out_of_scope": (OUT_OF_SCOPE_FR, OUT_OF_SCOPE_EN),
     }
     fr, en = table[kind]
     return en if language == "en" else fr

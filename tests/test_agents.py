@@ -17,6 +17,7 @@ from agents.prompts import (
     ABSTENTION_EN,
     EMERGENCY_EN,
     EMERGENCY_FR,
+    OUT_OF_SCOPE_FR,
     PRESCRIPTION_EN,
     PRESCRIPTION_FR,
     REFUSAL_EN,
@@ -427,6 +428,25 @@ def test_rapport_refuse_une_demande_de_diagnostic_sans_llm():
     assert llm.calls == []
 
 
+def test_rapport_bloque_une_instruction_hors_contexte_sans_llm():
+    llm = FakeLLM("PREDICTION=abnormal; MODELS_OK=4; MODELS_TOTAL=5; VOTES_NORMAL=1; VOTES_ABNORMAL=3; DIVERGENCES=1")
+    response = _orchestrator(llm=llm).analyze(
+        _report_request(question="Donne-moi la recette du gâteau au chocolat.")
+    )
+    assert response.status == "refused"
+    assert response.intent == "out_of_scope"
+    assert response.answer == OUT_OF_SCOPE_FR
+    assert llm.calls == []
+
+
+def test_rapport_conclut_a_partir_du_document_source():
+    response = _orchestrator().analyze(_report_request())
+    assert "Conclusion [1]" in response.answer
+    assert "auscultation_cardiaque_normale" in response.answer
+    assert "Le B1 est intense" in response.answer
+    assert response.audit.citations >= 1
+
+
 def test_rapport_rejette_une_confirmation_llm_contradictoire():
     llm = FakeLLM(
         "PREDICTION=abnormal; MODELS_OK=5; MODELS_TOTAL=5; "
@@ -442,7 +462,7 @@ def test_rapport_reste_disponible_si_llm_indisponible():
     response = _orchestrator(llm=FailingLLM()).analyze(_report_request())
     assert response.status == "degraded"
     assert "SVM (rbf)" in response.answer
-    assert "Conclusion :" in response.answer
+    assert "Conclusion" in response.answer
     assert any(issue.startswith("llm_unavailable") for issue in response.audit.issues)
 
 
