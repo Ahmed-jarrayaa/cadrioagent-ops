@@ -71,7 +71,9 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
 - Preuve réelle : `agents/reports/agent_smoke_1_5b.json`, **8/8 audits OK**. Limitations
   documentées : audit lexical (pas de vérification de la vérité médicale) et avertissements
   `cross_lingual_grounding` / `language_mismatch` quand le 1.5B répond en français à une question
-  anglaise.
+  anglaise. L'interface web (`web/index.html`) expose désormais ce chat : elle appelle `/analyze`
+  et affiche la réponse, les sources, l'audit et les garde-fous, ainsi qu'un panneau de liens vers
+  les rapports et preuves du projet.
 
 ## 5. Jalon 6 — Tests continus
 

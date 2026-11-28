@@ -681,7 +681,11 @@ Fonctionnement :
 - dépôt ou sélection d'un **WAV** ;
 - appel de `/analyze_all` (gateway) ou `/predict_all` (audio-engine) ;
 - affichage des trois cartes de résultats, du **consensus**, des métriques de référence et des
-  détails techniques (probabilités par segment, caractéristiques moyennes).
+  détails techniques (probabilités par segment, caractéristiques moyennes) ;
+- panneau **Chat RAG** : questions via `POST /analyze`, réponses sourcées, audit, garde-fous et
+  refus déterministes affichés dans l'interface ;
+- panneau **Rapport & preuves** : liens vers `RAPPORT_TECHNIQUE.md`, les rapports LLM/RAG/agents,
+  la couverture et l'API interactive (`/docs`).
 
 > L'API autorise toutes les origines (`CORS *`) : l'interface peut être ouverte depuis un autre
 > serveur local ou via `file://`.

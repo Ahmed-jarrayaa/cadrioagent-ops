@@ -370,6 +370,38 @@ body::before{
 .toast{position:fixed;z-index:80;left:50%;bottom:24px;transform:translateX(-50%);max-width:min(520px,calc(100vw - 32px));padding:12px 15px;border:1px solid var(--danger-line);border-radius:11px;background:#fff;color:var(--danger);font-size:.8rem;line-height:1.5;box-shadow:var(--shadow-lg);animation:rise .2s ease both}
 .mono{font-family:var(--mono);font-size:.92em}
 
+/* ---------- Chat RAG & rapports ---------- */
+.nav-links{display:flex;align-items:center;gap:6px}
+.nav-links a{padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink-2);font-size:.72rem;font-weight:750;text-decoration:none;white-space:nowrap;transition:border-color .2s,color .2s}
+.nav-links a:hover{border-color:var(--petrol-600);color:var(--petrol-700)}
+.consensus-badge.is-warning{border-color:var(--warn-line);background:var(--warn-bg);color:var(--warn)}
+.workspace-extra{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:20px;margin-top:26px;scroll-margin-top:86px}
+.chat-card,.report-card{display:flex;flex-direction:column;scroll-margin-top:86px}
+.chat-log{display:grid;gap:12px;max-height:430px;overflow:auto;margin-top:16px;padding:3px 2px 3px 3px}
+.chat-empty{padding:26px 18px;text-align:center;border:1px dashed var(--line-strong);border-radius:14px;background:var(--surface-2);color:var(--muted);font-size:.8rem;line-height:1.65}
+.chat-msg{padding:13px 15px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.chat-msg.user{margin-left:38px;background:var(--petrol-050);border-color:var(--petrol-100)}
+.chat-msg.assistant{border-left:4px solid var(--petrol-600)}
+.chat-msg.error{border-left-color:var(--danger);background:var(--danger-bg)}
+.chat-msg-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;color:var(--muted-2);font-size:.67rem;font-weight:750;letter-spacing:.05em;text-transform:uppercase}
+.chat-answer{margin:0;color:var(--ink-2);font-size:.84rem;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chat-sources{margin-top:11px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2)}
+.chat-sources h4{margin:0 0 7px;color:var(--ink-2);font-size:.7rem;letter-spacing:.05em;text-transform:uppercase}
+.chat-sources ol{margin:0;padding-left:18px;color:var(--muted);font-size:.73rem;line-height:1.6}
+.chat-sources li+li{margin-top:4px}
+.chat-form{display:grid;gap:10px;margin-top:14px}
+.chat-form textarea{width:100%;min-height:84px;resize:vertical;padding:12px 13px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;color:var(--navy-900);font-family:inherit;font-size:.84rem;line-height:1.6}
+.chat-form textarea:focus{outline:none;border-color:var(--petrol-600);box-shadow:0 0 0 3px var(--petrol-050)}
+.chat-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.report-list{display:grid;gap:9px;margin-top:16px}
+.report-link{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink-2);text-decoration:none;font-size:.8rem;font-weight:650;transition:border-color .2s,transform .2s}
+.report-link:hover{border-color:var(--petrol-600);transform:translateY(-1px)}
+.report-link .icon{width:16px;height:16px;flex:0 0 auto;color:var(--petrol-600)}
+.report-link small{display:block;margin-top:2px;color:var(--muted-2);font-size:.68rem;font-weight:500}
+.report-summary{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.report-summary p{margin:0 0 9px;color:var(--muted);font-size:.76rem;line-height:1.6}
+
 /* ---------- Responsive ---------- */
 @media(max-width:1080px){
   .workspace{grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr)}
@@ -380,6 +412,7 @@ body::before{
   .stepper{grid-template-columns:repeat(3,minmax(0,1fr))}
   .step{padding:10px}
   .workspace{grid-template-columns:1fr}
+  .workspace-extra{grid-template-columns:1fr}
   .action-card{position:static}
   .result-grid{grid-template-columns:1fr}
   .steps-grid{grid-template-columns:1fr}
@@ -414,6 +447,7 @@ body::before{
   .topbar-inner{padding:10px 14px;gap:10px}
   .brand-mark{width:38px;height:38px;border-radius:11px}
   .brand-text small{display:none}
+  .nav-links{display:none}
   .service-chip{padding:7px 10px;font-size:.72rem}
   .service-chip #serviceText{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .page{padding:16px 12px 36px}
@@ -474,6 +508,10 @@ body::before{
         <span class="brand-text"><strong>CardioAgent<span>-Ops</span></strong><small>Analyse PCG assistée</small></span>
       </a>
       <div class="topbar-actions">
+        <nav class="nav-links" aria-label="Sections du projet">
+          <a href="#chatSection">Chat RAG</a>
+          <a href="#reportSection">Rapport</a>
+        </nav>
         <button type="button" class="service-chip is-checking" id="serviceChip" title="Vérifier la connexion au service d'analyse">
           <span class="status-dot" aria-hidden="true"></span>
           <span id="serviceText">Connexion au service…</span>
@@ -660,6 +698,73 @@ body::before{
 
       <p class="disclaimer"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg><span><strong>Avertissement médical.</strong> Ces résultats sont produits par des modèles expérimentaux d'aide à l'analyse. Ils ne constituent pas un diagnostic médical et ne remplacent pas l'avis d'un professionnel de santé.</span></p>
     </section>
+
+    <section class="workspace-extra" id="chatSection" aria-labelledby="chatTitle">
+      <article class="card chat-card">
+        <header class="card-head">
+          <div>
+            <span class="section-kicker">Jalon 5 · Assistant documentaire</span>
+            <h2 id="chatTitle">Chat RAG</h2>
+            <p>Posez une question sur les deux documents du projet. Le service refuse diagnostic, prescription et urgence sans appeler le LLM.</p>
+          </div>
+          <span class="consensus-badge" id="chatStateBadge">—</span>
+        </header>
+
+        <div class="chat-log" id="chatLog" role="log" aria-live="polite">
+          <div class="chat-empty" id="chatEmpty">Essayez : « Qu'est-ce que le premier bruit B1 ? ». Les réponses sont ancrées dans les documents du projet et accompagnées de leurs sources.</div>
+        </div>
+
+        <form class="chat-form" id="chatForm">
+          <textarea id="chatQuestion" placeholder="Écrivez votre question sur l'auscultation cardiaque…" rows="3" maxlength="600" aria-label="Votre question"></textarea>
+          <div class="chat-actions">
+            <span class="format-note" id="chatHint">Entrée : envoyer · Maj + Entrée : nouvelle ligne</span>
+            <button type="submit" class="btn-primary" id="chatSend">
+              <svg class="icon" aria-hidden="true"><use href="#i-spark"></use></svg>
+              <span class="btn-label">Envoyer</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+          </div>
+        </form>
+
+        <div class="status-line" id="chatStatus" role="status" aria-live="polite">
+          <svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>
+          <span id="chatStatusText">Assistant prêt.</span>
+        </div>
+        <p class="disclaimer" style="margin-top:14px"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg><span><strong>Information pédagogique.</strong> L'assistant ne pose pas de diagnostic et ne prescrit aucun traitement. En cas d'urgence, contactez les services médicaux.</span></p>
+      </article>
+
+      <article class="card report-card" id="reportSection">
+        <header class="card-head">
+          <div>
+            <span class="section-kicker">Jalons 3 à 8 · Preuves</span>
+            <h2 id="reportTitle">Rapport & preuves</h2>
+            <p>Rapport consolidé, évaluations indépendantes et preuves d'exécution du projet.</p>
+          </div>
+          <svg class="icon" aria-hidden="true" style="width:18px;height:18px;color:var(--petrol-600)"><use href="#i-file"></use></svg>
+        </header>
+
+        <div class="report-summary" style="margin-top:0;padding-top:0;border-top:0">
+          <div class="tech-grid">
+            <div class="tech-item"><span>Tests</span><strong>117 réussis</strong></div>
+            <div class="tech-item"><span>RAG</span><strong>66 passages · 6/6</strong></div>
+            <div class="tech-item"><span>Agents</span><strong>8/8 audits</strong></div>
+            <div class="tech-item"><span>Couverture</span><strong>51 % globale</strong></div>
+          </div>
+        </div>
+
+        <nav class="report-list" aria-label="Rapports du projet">
+          <a class="report-link" data-file="RAPPORT_TECHNIQUE.md" href="#"><span>Rapport technique consolidé<small>Jalons 1 à 8 · synthèse et limites</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+          <a class="report-link" data-file="llm_finetuning/reports/local_1_5b_delivery.md" href="#"><span>Livraison LLM 1.5B<small>QLoRA, GGUF, Ollama, MLflow</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+          <a class="report-link" data-file="llm_finetuning/reports/local_1_5b_evaluation.md" href="#"><span>Évaluation LLM indépendante<small>Base vs fine-tuné · jeu de test 70</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+          <a class="report-link" data-file="rag_engine/reports/rag_evaluation.json" href="#"><span>Évaluation RAG<small>6 questions · sources et scores</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+          <a class="report-link" data-file="agents/reports/agent_smoke_1_5b.md" href="#"><span>Smoke tests multi-agents<small>8 scénarios · garde-fous et audit</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+          <a class="report-link" data-file="reports/coverage.txt" href="#"><span>Couverture des tests<small>51 % globale · 117 tests</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+          <a class="report-link" data-api-docs="1" href="#"><span>API interactive (Swagger)<small>/analyze · /analyze_all · /health</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+        </nav>
+
+        <p class="quality-note">Ces liens supposent l'interface servie depuis la racine du dépôt (par exemple <span class="mono">python -m http.server 5501</span>). Les fichiers sont ouverts dans un nouvel onglet.</p>
+      </article>
+    </section>
   </main>
 
   <footer class="footer">
@@ -676,7 +781,8 @@ const state = {
   file: null, sig: null, sr: 0, ch: 0, bits: 0, peak: 0, rms: 0, zcr: 0,
   view: [0, 1], ymax: 1, hover: null, drag: null,
   service: null, serviceHealth: null, candidates: [], probePromise: null,
-  predicting: false, result: null, timer: null, startedAt: 0
+  predicting: false, result: null, timer: null, startedAt: 0,
+  chatBusy: false
 };
 
 function esc(value){
@@ -1766,11 +1872,153 @@ function renderResults(data){
   $('technicalDetails').open = false;
   setStep(3);
 }
+/* ---------- Chat RAG et rapports ---------- */
+function rootUrl(){
+  const path = location.pathname.replace(/\/+$/, '');
+  return new URL(path.endsWith('/web') ? '../' : './', location.href).href;
+}
+function chatBase(){
+  if (state.service) {
+    const body = state.serviceHealth && state.serviceHealth.body;
+    if (state.service.kind === 'gateway' || state.service.kind === 'auto' || (body && body.services && body.services.orchestrator)) {
+      return state.service.base;
+    }
+  }
+  const gateway = (state.candidates || []).find(candidate => candidate.kind === 'gateway');
+  return gateway ? gateway.base : (location.protocol.startsWith('http') ? location.origin : 'http://127.0.0.1:8085');
+}
+function setupReportLinks(){
+  document.querySelectorAll('.report-link').forEach(link => {
+    link.target = '_blank';
+    link.rel = 'noopener';
+    const file = link.getAttribute('data-file');
+    if (file) {
+      link.href = rootUrl() + file;
+    } else if (link.hasAttribute('data-api-docs')) {
+      link.href = '#';
+      link.addEventListener('click', event => {
+        event.preventDefault();
+        window.open(chatBase() + '/docs', '_blank', 'noopener');
+      });
+    }
+  });
+}
+function setChatState(kind, text){
+  const badge = $('chatStateBadge');
+  if (!badge) return;
+  badge.classList.remove('is-success','is-danger','is-warning');
+  if (kind === 'ready') badge.classList.add('is-success');
+  if (kind === 'checking' || kind === 'partial') badge.classList.add('is-warning');
+  if (kind === 'down') badge.classList.add('is-danger');
+  badge.textContent = text;
+}
+function setChatStatus(text, tone = 'info'){
+  const line = $('chatStatus');
+  line.classList.remove('is-busy','is-error','is-success');
+  if (tone === 'busy') line.classList.add('is-busy');
+  if (tone === 'error') line.classList.add('is-error');
+  if (tone === 'success') line.classList.add('is-success');
+  const use = line.querySelector('use');
+  if (use) use.setAttribute('href', tone === 'error' ? '#i-alert' : tone === 'success' ? '#i-check' : tone === 'busy' ? '#i-clock' : '#i-info');
+  setText('chatStatusText', text);
+}
+function setChatBusy(on){
+  state.chatBusy = !!on;
+  const button = $('chatSend');
+  button.disabled = !!on;
+  button.classList.toggle('is-loading', !!on);
+}
+function appendChat(role, html){
+  const empty = $('chatEmpty');
+  if (empty) empty.remove();
+  const log = $('chatLog');
+  const message = document.createElement('article');
+  message.className = 'chat-msg ' + role;
+  message.innerHTML = html;
+  log.appendChild(message);
+  log.scrollTop = log.scrollHeight;
+}
+function renderChatAnswer(data){
+  const title = data.status === 'refused' ? 'Refus déterministe' : data.intent ? 'Réponse · ' + data.intent : 'Réponse';
+  const sources = Array.isArray(data.sources) ? data.sources : [];
+  const sourcesHtml = sources.length
+    ? `<div class="chat-sources"><h4>Sources (${sources.length})</h4><ol>${sources.map(source =>
+        `<li>${esc(source.source || source.source_id || 'Document')}${source.page ? ' · p. ' + esc(source.page) : ''} — score ${esc(fmt(Number(source.score), 3))}${source.license ? ' · ' + esc(source.license) : ''}</li>`
+      ).join('')}</ol></div>`
+    : '';
+  const guard = data.guardrails || {};
+  const audit = data.audit || {};
+  const chips = [];
+  if (guard.refusal_applied) chips.push('<span class="chip is-danger">Refus appliqué</span>');
+  if (guard.diagnosis_blocked) chips.push('<span class="chip is-success">Diagnostic bloqué</span>');
+  if (guard.prescription_blocked) chips.push('<span class="chip is-success">Prescription bloquée</span>');
+  if (guard.emergency_redirect) chips.push('<span class="chip is-warning">Redirection urgence</span>');
+  if (audit.passed) chips.push('<span class="chip is-success">Audit OK</span>');
+  else if (audit.issues && audit.issues.length) chips.push('<span class="chip is-danger">Audit : ' + esc(audit.issues.length) + ' problème(s)</span>');
+  if (audit.warnings && audit.warnings.length) chips.push('<span class="chip is-warning">' + esc(plural(audit.warnings.length, 'avertissement')) + '</span>');
+  if (data.language) chips.push('<span class="chip">' + esc(String(data.language).toUpperCase()) + '</span>');
+  if (data.latency_ms != null) chips.push('<span class="chip">' + esc(fmt(Number(data.latency_ms), 0)) + ' ms</span>');
+  const disclaimer = data.disclaimer || "Information pédagogique issue des documents du projet. Ce n'est pas un avis médical, un diagnostic ni une prescription.";
+  return `<div class="chat-msg-head"><span>${esc(title)}</span><span>${esc(data.model || 'cardio-llm')}</span></div>
+    <p class="chat-answer">${esc(data.answer || '')}</p>
+    ${sourcesHtml}
+    <div class="chat-meta">${chips.join('')}</div>
+    <p class="disclaimer" style="margin:12px 0 0;padding:9px 11px;font-size:.7rem">${esc(disclaimer)}</p>`;
+}
+async function sendChat(question){
+  if (state.chatBusy || !question) return;
+  appendChat('user', `<div class="chat-msg-head"><span>Vous</span></div><p class="chat-answer">${esc(question)}</p>`);
+  setChatBusy(true);
+  setChatStatus('Recherche dans les documents du projet…', 'busy');
+  setChatState('checking', '…');
+  const started = Date.now();
+  try {
+    const response = await fetchWithTimeout(chatBase() + '/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question, top_k: 3})
+    }, 180000);
+    const body = await readResponse(response);
+    if (!response.ok) throw new Error(errorDetail(body, 'Service indisponible'));
+    appendChat('assistant', renderChatAnswer(body));
+    const elapsed = Date.now() - started;
+    setChatStatus(`Réponse reçue en ${elapsed} ms · ${esc(plural((body.sources || []).length, 'source'))}`, 'success');
+    setChatState(body.status === 'refused' ? 'partial' : 'ready', body.status === 'refused' ? 'Refus' : 'Sourcé');
+  } catch (error) {
+    appendChat('error', `<div class="chat-msg-head"><span>Erreur</span></div><p class="chat-answer">${esc(error.message || 'Impossible de contacter le service.')}</p>`);
+    setChatStatus(error.message || 'Impossible de contacter le service.', 'error');
+    setChatState('down', 'Indisponible');
+  } finally {
+    setChatBusy(false);
+  }
+}
+function setupChat(){
+  const form = $('chatForm');
+  const input = $('chatQuestion');
+  if (form && input) {
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const question = input.value.trim();
+      if (!question || state.chatBusy) return;
+      input.value = '';
+      sendChat(question);
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+  }
+  setupReportLinks();
+}
+
 function init(){
   drawBase();
   updateActionState();
   setStep(1);
   setRunStatus('Prêt à analyser un signal.', 'info');
+  setupChat();
   probeServices();
   window.addEventListener('load', () => { drawBase(); drawOverlay(); });
   window.addEventListener('focus', () => {
