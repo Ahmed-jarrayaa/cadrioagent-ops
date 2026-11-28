@@ -17,7 +17,13 @@ from fastapi.responses import StreamingResponse
 
 from agents.clients import LLM, OllamaClient, QdrantRetriever, Retriever
 from agents.config import Settings
-from agents.schemas import AnalyzeRequest, AnalyzeResponse
+from agents.nodes import evaluate_prompt
+from agents.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    PromptCheckRequest,
+    PromptCheckResponse,
+)
 from agents.service import Orchestrator
 
 logger = logging.getLogger("agent-orchestrator")
@@ -62,7 +68,7 @@ def create_app(
             "service": "agent-orchestrator",
             "status": "ok",
             "graph": ["analyste", "cardiologue_rag", "auditeur"],
-            "endpoints": ["/health", "/analyze", "/analyze/stream", "/docs"],
+            "endpoints": ["/health", "/check_prompt", "/analyze", "/analyze/stream", "/docs"],
         }
 
     @app.get("/health")
@@ -80,6 +86,11 @@ def create_app(
             "model": settings.llm_model,
             "collection": settings.collection,
         }
+
+    @app.post("/check_prompt", response_model=PromptCheckResponse)
+    def check_prompt(payload: PromptCheckRequest) -> PromptCheckResponse:
+        """Première étape du workflow : valide le prompt sans prédiction, RAG ou LLM."""
+        return PromptCheckResponse(**evaluate_prompt(payload.instruction))
 
     @app.post("/analyze", response_model=AnalyzeResponse)
     def analyze(request: AnalyzeRequest) -> AnalyzeResponse:

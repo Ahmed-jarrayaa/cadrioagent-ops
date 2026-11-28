@@ -23,7 +23,7 @@ SERVICE_ORDER = (
     "agent-orchestrator", "vector-db", "llm-server",
 )
 SERVICE_STEPS = {
-    "api-gateway": "Réception du WAV et de l'instruction",
+    "api-gateway": "Réception du WAV et validation du prompt",
     "audio-engine": "Prétraitement et 5 prédictions",
     "mlflow-server": "Métadonnées de référence des modèles",
     "agent-orchestrator": "Graphe Analyste → Cardiologue → Auditeur",
@@ -36,6 +36,54 @@ SSE_HEADERS = {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
+
+PROMPT_UNAVAILABLE = (
+    "La pertinence du prompt n'a pas pu être vérifiée : le service de validation est "
+    "indisponible. Aucune prédiction n'a été lancée. Réessayez dans un instant."
+)
+
+
+async def _check_prompt(client: Any, instruction: str) -> dict[str, Any]:
+    """Valide le prompt avant tout prétraitement ou appel aux modèles.
+
+    La vérification est déterministe et exécutée par l'orchestrateur sans RAG,
+    sans LLM et sans audio-engine. En cas d'indisponibilité, le workflow est
+    bloqué plutôt que de lancer des prédictions non validées.
+    """
+    try:
+        response = await client.post(
+            f"{ORCH}/check_prompt", json={"instruction": instruction}
+        )
+    except Exception as error:
+        return {
+            "relevant": False,
+            "intent": "out_of_scope",
+            "reason": "unavailable",
+            "message": f"{PROMPT_UNAVAILABLE} ({type(error).__name__})",
+        }
+    if response.status_code >= 400:
+        return {
+            "relevant": False,
+            "intent": "out_of_scope",
+            "reason": "unavailable",
+            "message": PROMPT_UNAVAILABLE,
+        }
+    try:
+        body = response.json() or {}
+    except Exception:
+        body = {}
+    if not body.get("relevant"):
+        return {
+            "relevant": False,
+            "intent": body.get("intent") or "out_of_scope",
+            "reason": body.get("reason") or "out_of_scope",
+            "message": body.get("message") or (
+                "Cette demande n'est pas liée au domaine du système. "
+                "Reformulez votre prompt."
+            ),
+        }
+    return {"relevant": True, "intent": body.get("intent") or "report",
+            "reason": "ok", "message": ""}
 
 
 class WorkflowTracker:
@@ -404,6 +452,10 @@ async def analyze_all_report(
     data = await file.read()
     started = time.perf_counter()
     async with httpx.AsyncClient(timeout=300) as client:
+        validation = await _check_prompt(client, instruction)
+        if not validation["relevant"]:
+            raise HTTPException(400, validation["message"])
+
         audio_started = time.perf_counter()
         try:
             r1 = await client.post(
@@ -485,9 +537,12 @@ async def _stream_report(filename: str, data: bytes, instruction: str) -> AsyncI
         async def worker() -> str:
             final_status = "error"
             try:
-                await mark("api-gateway", "running", "Réception du WAV et de l'instruction")
+                await mark("api-gateway", "running", "Validation de la pertinence du prompt")
+                validation = await _check_prompt(client, instruction)
+                if not validation["relevant"]:
+                    return await stop("api-gateway", validation["message"])
                 await mark("api-gateway", "ok",
-                           f"instruction reçue ({len(instruction)} caractères)")
+                           "prompt validé — réception du WAV et de l'instruction")
 
                 await mark("audio-engine", "running", "Prétraitement et 5 prédictions")
                 audio_started = time.perf_counter()

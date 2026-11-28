@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from agents.config import Settings
 from agents.main import create_app
-from agents.nodes import classify_intent, detect_language
+from agents.nodes import classify_intent, detect_language, evaluate_prompt
 from agents.prompts import (
     ABSTENTION_EN,
     EMERGENCY_EN,
@@ -115,6 +115,45 @@ def test_classification_intentions():
     assert classify_intent("Diagnostique le souffle de mon patient.") == "diagnosis"
     assert classify_intent("Quelle posologie pour ce médicament ?") == "prescription"
     assert classify_intent("J'ai une douleur thoracique intense.") == "emergency"
+
+
+def test_verification_prompt_pertinent():
+    verdict = evaluate_prompt(
+        "Analyse ce signal cardiaque et explique les résultats des modèles."
+    )
+    assert verdict["relevant"] is True
+    assert verdict["intent"] == "knowledge"
+    assert verdict["message"] == ""
+
+
+def test_verification_prompt_hors_domaine():
+    verdict = evaluate_prompt("Donne-moi la recette du gateau au chocolat.")
+    assert verdict["relevant"] is False
+    assert verdict["intent"] == "out_of_scope"
+    assert "Reformulez votre prompt" in verdict["message"]
+    assert "Aucune prédiction" in verdict["message"]
+
+
+def test_verification_prompt_interdit():
+    verdict = evaluate_prompt("Diagnostique le souffle de mon patient.")
+    assert verdict["relevant"] is False
+    assert verdict["reason"] == "diagnosis"
+    assert "Aucune prédiction" in verdict["message"]
+
+
+def test_endpoint_check_prompt_sans_appel_llm():
+    llm = FakeLLM()
+    app = create_app(
+        retriever=FakeRetriever([B1_RESULT]),
+        llm=llm,
+        settings=Settings(llm_url="http://test", qdrant_url="http://test"),
+    )
+    response = TestClient(app).post(
+        "/check_prompt", json={"instruction": "Quelle est la météo à Paris ?"}
+    )
+    assert response.status_code == 200
+    assert response.json()["relevant"] is False
+    assert llm.calls == []
 
 
 # --- Parcours nominal --------------------------------------------------------

@@ -73,6 +73,35 @@ OUT_OF_SCOPE_EN = (
     "For any health decision, consult a healthcare professional."
 )
 
+PROMPT_RELEVANCE_FR = (
+    "Cette demande n\u2019est pas liée au domaine du système : il analyse et classe uniquement "
+    "des signaux cardiaques. Aucune prédiction n\u2019a été lancée. Reformulez votre prompt, "
+    "par exemple : « Analyse ce signal et explique les résultats des modèles »."
+)
+PROMPT_RELEVANCE_EN = (
+    "This request is outside the system domain: it only analyses and classifies cardiac "
+    "signals. No prediction was run. Please rephrase your prompt, for example: "
+    "\"Analyse this signal and explain the models' results\"."
+)
+PROMPT_UNSAFE_FR = (
+    "Cette demande porte sur un usage non autorisé (diagnostic, prescription ou urgence). "
+    "Le système se limite au dépistage automatique à partir des cinq modèles. Aucune prédiction "
+    "n\u2019a été lancée. Reformulez votre prompt en demandant une analyse ou une explication "
+    "des résultats."
+)
+PROMPT_UNSAFE_EN = (
+    "This request asks for an unauthorised use (diagnosis, prescription or emergency care). "
+    "The system only performs automated screening with the five models. No prediction was run. "
+    "Please rephrase your prompt to ask for an analysis or an explanation of the results."
+)
+
+
+def prompt_relevance_message(language: str, reason: str) -> str:
+    """Message déterministe affiché avant toute prédiction quand le prompt est rejeté."""
+    if reason in {"diagnosis", "prescription", "emergency"}:
+        return PROMPT_UNSAFE_EN if language == "en" else PROMPT_UNSAFE_FR
+    return PROMPT_RELEVANCE_EN if language == "en" else PROMPT_RELEVANCE_FR
+
 AUDIO_LIMIT_FR = (
     "Ce résultat est un score de dépistage automatique, pas un diagnostic. "
     "Seul un professionnel de santé peut l'interpréter avec l'examen clinique."

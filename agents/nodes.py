@@ -17,6 +17,7 @@ from agents.prompts import (
     build_report_prompt,
     build_user_prompt,
     canonical_answer,
+    prompt_relevance_message,
     report_system_prompt,
     system_prompt,
 )
@@ -128,6 +129,34 @@ def classify_intent(text: str) -> str:
     if _matches(DIAGNOSIS_PATTERNS, text):
         return "diagnosis"
     return "knowledge"
+
+
+def evaluate_prompt(instruction: str) -> dict[str, Any]:
+    """Qualifie le prompt avant toute prédiction, sans RAG ni LLM.
+
+    Un prompt est accepté seulement s'il porte explicitement sur le signal, les
+    modèles ou les documents et s'il ne demande ni diagnostic, ni prescription,
+    ni gestion d'urgence. Aucun appel réseau n'est effectué ici.
+    """
+    question = normalize_question(instruction or "")
+    language = detect_language(question) if question else "fr"
+    intent = classify_intent(question) if question else "out_of_scope"
+    if not question:
+        intent, reason = "out_of_scope", "empty"
+    elif intent != "knowledge":
+        reason = intent
+    elif not is_instruction_in_context(question):
+        intent, reason = "out_of_scope", "out_of_scope"
+    else:
+        reason = "ok"
+    relevant = reason == "ok"
+    return {
+        "relevant": relevant,
+        "language": language,
+        "intent": intent,
+        "reason": reason,
+        "message": "" if relevant else prompt_relevance_message(language, reason),
+    }
 
 
 def _tokens(text: str) -> list[str]:

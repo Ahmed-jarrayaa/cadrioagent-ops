@@ -597,6 +597,7 @@ curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
 |---|---|---|
 | `GET` | `/` | liste des agents et endpoints |
 | `GET` | `/health` | état de Qdrant, du LLM et de la collection |
+| `POST` | `/check_prompt` | valide la pertinence du prompt avant toute prédiction (déterministe, sans RAG/LLM) |
 | `POST` | `/analyze` | question libre, payload audio ou rapport (`mode=report`, `workflow`) ; réponse auditée Pydantic |
 | `POST` | `/analyze/stream` | flux SSE des nœuds réellement exécutés par le graphe (`step`, `result`, `error`) |
 
@@ -691,6 +692,9 @@ Fonctionnement :
   `localhost:8085` (gateway), `127.0.0.1:8085`, `localhost:8001` (audio-engine),
   `127.0.0.1:8001`, puis l'origine courante ;
 - dépôt ou sélection d'un **WAV**, puis saisie facultative d'une **instruction** de rapport ;
+- **validation du prompt en premier** via `/check_prompt` : une demande sans lien avec l'analyse
+  et la classification des signaux cardiaques est bloquée avant tout prétraitement, avec un
+  message invitant à reformuler ; aucune prédiction n'est lancée dans ce cas ;
 - appel de `/analyze_all_report/stream` (gateway) : les 5 modèles reçoivent le même signal
   prétraité, puis l'agent rédige le rapport ; repli sur `/analyze_all_report`, `/analyze_all`
   ou `/predict_all` si le flux n'est pas disponible ;

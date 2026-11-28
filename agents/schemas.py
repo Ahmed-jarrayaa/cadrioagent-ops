@@ -53,6 +53,22 @@ class AnalyzeRequest(BaseModel):
         return self
 
 
+class PromptCheckRequest(BaseModel):
+    """Vérification de pertinence, sans prédiction, RAG ou LLM."""
+
+    instruction: str = Field(default="", max_length=2000)
+
+
+class PromptCheckResponse(BaseModel):
+    """Résultat déterministe de la vérification du prompt."""
+
+    relevant: bool
+    language: Language
+    intent: Intent
+    reason: str
+    message: str
+
+
 class AudioSummary(BaseModel):
     """Résumé du score audio, sans interprétation diagnostique."""
 

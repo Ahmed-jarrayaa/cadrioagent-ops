@@ -620,7 +620,7 @@ body::before{
           <div class="instruction-block">
             <label for="analysisInstruction">Instruction pour le rapport</label>
             <textarea id="analysisInstruction" rows="3" maxlength="700" placeholder="Ex. : Analyse ce signal cardiaque et génère un rapport détaillé à partir des résultats des modèles.">Analyse ce signal cardiaque et génère un rapport détaillé à partir des résultats réels des modèles.</textarea>
-            <small>Le rapport sera produit après les prédictions, uniquement à partir des résultats obtenus. Les modèles sont validés sur des signaux PCG, pas sur des ECG.</small>
+            <small>La pertinence du prompt est vérifiée avant toute prédiction : une demande hors domaine arrête immédiatement le workflow et demande de reformuler. Les modèles sont validés sur des signaux PCG, pas sur des ECG.</small>
           </div>
           <button type="button" class="btn-primary" id="predict" disabled>
             <svg class="icon" aria-hidden="true"><use href="#i-pulse"></use></svg>

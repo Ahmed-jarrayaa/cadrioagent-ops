@@ -50,8 +50,19 @@ class FakeResponse:
             )
 
 
-def install_transport(monkeypatch, handler):
-    """Remplace ``httpx.AsyncClient`` et retourne la liste des appels."""
+PROMPT_OK = {
+    "relevant": True, "language": "fr", "intent": "report",
+    "reason": "ok", "message": "",
+}
+
+
+def install_transport(monkeypatch, handler, prompt_check=None):
+    """Remplace ``httpx.AsyncClient`` et retourne la liste des appels.
+
+    La vérification de pertinence est simulée comme réussie par défaut ; les
+    tests peuvent la remplacer avec ``prompt_check``.
+    """
+    prompt_body = PROMPT_OK if prompt_check is None else prompt_check
     calls: list[tuple[str, str, dict]] = []
 
     class FakeAsyncClient:
@@ -70,6 +81,8 @@ def install_transport(monkeypatch, handler):
 
         async def post(self, url, **kwargs):
             calls.append(("POST", url, kwargs))
+            if url.startswith(f"{gateway.ORCH}/check_prompt"):
+                return FakeResponse(prompt_body)
             return handler("POST", url, kwargs)
 
         @asynccontextmanager
@@ -287,10 +300,11 @@ def test_analyze_all_report_enchaine_5_modeles_puis_agent(monkeypatch):
     assert body["instruction"] == "Analyse ce signal et génère un rapport détaillé."
     assert body["workflow"] == WORKFLOW
     assert [call[1] for call in calls] == [
-        f"{gateway.AUDIO}/predict_all", f"{gateway.ORCH}/analyze"
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict_all",
+        f"{gateway.ORCH}/analyze",
     ]
-    assert calls[0][2]["params"]["families"] == "svm,tree,cnn,tl,hybrid"
-    payload = calls[1][2]["json"]
+    assert calls[1][2]["params"]["families"] == "svm,tree,cnn,tl,hybrid"
+    payload = calls[2][2]["json"]
     assert payload["mode"] == "report"
     assert payload["question"] == "Analyse ce signal et génère un rapport détaillé."
     assert payload["workflow"]["analysis"][0]["key"] == "svm"
@@ -324,20 +338,26 @@ def test_workflow_services_expose_les_six_services(monkeypatch):
     assert len(calls) == 3
 
 
-def test_trace_indique_le_blocage_avant_rag_et_llm(monkeypatch):
-    refused = {"status": "refused", "intent": "out_of_scope", "answer": "hors contexte", "sources": []}
-    install_transport(monkeypatch, lambda method, url, kwargs: (
-        FakeResponse(WORKFLOW) if url.startswith(gateway.AUDIO) else FakeResponse(refused)
-    ))
+def test_prompt_hors_contexte_bloque_avant_toute_prediction(monkeypatch):
+    rejected = {
+        "relevant": False, "language": "fr", "intent": "out_of_scope",
+        "reason": "out_of_scope",
+        "message": "Cette demande n\u2019est pas liée au domaine du système. Reformulez votre prompt.",
+    }
+    calls = install_transport(
+        monkeypatch,
+        lambda method, url, kwargs: FakeResponse(WORKFLOW),
+        prompt_check=rejected,
+    )
     with TestClient(gateway.app) as client:
-        body = client.post(
+        response = client.post(
             "/analyze_all_report",
             files={"file": ("signal.wav", b"RIFF", "audio/wav")},
             data={"instruction": "Recette du gateau"},
-        ).json()
-    trace = {item["service"]: item for item in body["workflow_trace"]}
-    assert trace["vector-db"]["status"] == "bloque"
-    assert trace["llm-server"]["status"] == "bloque"
+        )
+    assert response.status_code == 400
+    assert "Reformulez votre prompt" in response.json()["detail"]
+    assert [call[1] for call in calls] == [f"{gateway.ORCH}/check_prompt"]
 
 
 def test_analyze_all_report_bloque_si_un_modele_manque(monkeypatch):
@@ -349,7 +369,9 @@ def test_analyze_all_report_bloque_si_un_modele_manque(monkeypatch):
         )
     assert response.status_code == 502
     assert "hybrid" in response.json()["detail"]
-    assert len(calls) == 1  # l'agent n'est jamais appelé
+    assert [call[1] for call in calls] == [
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict_all"
+    ]  # l'agent n'est jamais appelé
 
 
 def test_analyze_all_report_valide_fichier_et_instruction(monkeypatch):
@@ -471,7 +493,38 @@ def test_stream_arrete_au_service_indispensable_en_erreur(monkeypatch):
     assert errors and errors[0]["service"] == "audio-engine"
     assert errors[0]["indispensable"] is True
     assert not any(event == "result" for event, _ in events)
-    assert [call[1] for call in calls] == [f"{gateway.AUDIO}/predict_all"]
+    assert [call[1] for call in calls] == [
+        f"{gateway.ORCH}/check_prompt", f"{gateway.AUDIO}/predict_all"
+    ]
+
+
+def test_stream_bloque_prompt_hors_domaine_avant_prediction(monkeypatch):
+    rejected = {
+        "relevant": False, "language": "fr", "intent": "out_of_scope",
+        "reason": "out_of_scope",
+        "message": "Cette demande n\u2019est pas liée au domaine du système. Reformulez votre prompt.",
+    }
+    calls = install_transport(
+        monkeypatch,
+        lambda method, url, kwargs: FakeResponse(WORKFLOW),
+        prompt_check=rejected,
+    )
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all_report/stream",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+            data={"instruction": "Donne-moi la recette du gateau."},
+        )
+
+    events = parse_sse(response.text)
+    steps = [(item["service"], item["status"])
+             for event, item in events if event == "step"]
+    assert steps == [("api-gateway", "running"), ("api-gateway", "erreur")]
+    errors = [item for event, item in events if event == "error"]
+    assert errors[0]["service"] == "api-gateway"
+    assert "Reformulez votre prompt" in errors[0]["detail"]
+    assert not any(event == "result" for event, _ in events)
+    assert [call[1] for call in calls] == [f"{gateway.ORCH}/check_prompt"]
 
 
 def test_stream_repli_sur_analyze_si_orchestrateur_sans_sse(monkeypatch):

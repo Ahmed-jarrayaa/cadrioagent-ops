@@ -90,6 +90,13 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
   derniers via la santé de l'orchestrateur). La réponse de `/analyze_all_report` contient en plus
   `workflow_trace` (statut, détail et durée mesurée pour chaque service). L'interface a supprimé
   le panneau « Jalons 3 à 8 · Preuves » et affiche ce parcours à la place.
+- **Validation du prompt avant prédiction** : la gateway appelle en premier
+  `POST /check_prompt` de l'orchestrateur. Cette vérification déterministe contrôle que
+  l'instruction porte sur l'analyse/la classification des signaux cardiaques et qu'elle ne
+  demande ni diagnostic, ni prescription, ni gestion d'urgence. Elle n'effectue aucun appel
+  RAG, LLM ou audio-engine. Si le prompt est rejeté, le workflow s'arrête immédiatement avec
+  un message FR/EN invitant à reformuler ; `/predict_all` n'est jamais appelé. La route
+  non diffusée `/analyze_all_report` applique la même règle.
 - **Workflow temps réel (SSE)** : `POST /analyze_all_report/stream` diffuse les événements
   `step` (service, statut `running` / `ok` / `erreur`, détail), `error`, `result` et `status`.
   La gateway émet ses propres étapes autour des appels réels à `/predict_all` et relaie les
@@ -108,11 +115,11 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
 
 ## 5. Jalon 6 — Tests continus
 
-- **135 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
+- **140 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
   avec faux ONNX), `tests/test_api.py` (proxys gateway avec `httpx` factice),
   `tests/test_agents.py` (graphe, garde-fous FR/EN, audit) et `tests/test_rag.py` (chunking,
   Qdrant mémoire, évaluation).
-- Couverture (`reports/coverage.txt`) : **58 % globale**, 80–100 % sur les services applicatifs.
+- Couverture (`reports/coverage.txt`) : **59 % globale**, 80–100 % sur les services applicatifs.
   Le reste correspond aux utilitaires d'entraînement (`registry.py`, `fold_utils.py`,
   `mlflow_utils.py`, `src/dataset.py`) qui ne sont pas exécutés par les tests de service.
 - Aucun test ne charge de modèle volumineux, n'appelle un service distant ni ne modifie les
