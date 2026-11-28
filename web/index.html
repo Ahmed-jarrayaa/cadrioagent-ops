@@ -645,6 +645,19 @@ body::before{
       </aside>
     </section>
 
+    <section class="card workflow-panel" id="workflowSection" aria-labelledby="workflowTitle">
+      <header class="card-head">
+        <div>
+          <span class="section-kicker">Passage du workflow · 6 services</span>
+          <h2 id="workflowTitle">Progression de l'analyse</h2>
+          <p>Chaque service passe en « En analyse » puis en « OK » lorsque le backend a réellement terminé son traitement.</p>
+        </div>
+        <span class="consensus-badge" id="workflowBadge">—</span>
+      </header>
+      <div class="workflow-track" id="workflowTrack" aria-live="polite"></div>
+      <div class="workflow-progress" aria-hidden="true"><span id="workflowProgressBar"></span></div>
+    </section>
+
     <section class="getting-started" id="gettingStarted" aria-labelledby="howTitle">
       <div class="section-heading">
         <div><span class="section-kicker">Parcours simplifié</span><h2 id="howTitle">Trois étapes, aucune configuration.</h2></div>
@@ -758,19 +771,6 @@ body::before{
         <p class="disclaimer" style="margin-top:14px"><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg><span><strong>Information pédagogique.</strong> L'assistant ne pose pas de diagnostic et ne prescrit aucun traitement. En cas d'urgence, contactez les services médicaux.</span></p>
       </article>
 
-    </section>
-
-    <section class="card workflow-panel" id="workflowSection" aria-labelledby="workflowTitle">
-      <header class="card-head">
-        <div>
-          <span class="section-kicker">Passage du workflow · 6 services</span>
-          <h2 id="workflowTitle">Progression de l'analyse</h2>
-          <p>Chaque service passe en « En analyse » puis en « OK » lorsque le backend a réellement terminé son traitement.</p>
-        </div>
-        <span class="consensus-badge" id="workflowBadge">—</span>
-      </header>
-      <div class="workflow-track" id="workflowTrack" aria-live="polite"></div>
-      <div class="workflow-progress" aria-hidden="true"><span id="workflowProgressBar"></span></div>
     </section>
 
     <section class="card generated-report" id="generatedReport" hidden aria-labelledby="generatedReportTitle">

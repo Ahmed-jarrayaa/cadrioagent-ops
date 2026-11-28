@@ -695,6 +695,8 @@ Fonctionnement :
 - **validation du prompt en premier** via `/check_prompt` : une demande sans lien avec l'analyse
   et la classification des signaux cardiaques est bloquée avant tout prétraitement, avec un
   message invitant à reformuler ; aucune prédiction n'est lancée dans ce cas ;
+- le panneau de progression des 6 services est placé **juste sous la zone d'upload**, avant
+  les résultats, pour voir la validation et l'exécution dès le lancement ;
 - appel de `/analyze_all_report/stream` (gateway) : les 5 modèles reçoivent le même signal
   prétraité, puis l'agent rédige le rapport ; repli sur `/analyze_all_report`, `/analyze_all`
   ou `/predict_all` si le flux n'est pas disponible ;
