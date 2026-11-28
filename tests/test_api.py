@@ -8,6 +8,8 @@ remplacé par un transport factice. Aucun conteneur n'est requis.
 from __future__ import annotations
 
 import importlib.util
+import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
@@ -22,11 +24,17 @@ SPEC.loader.exec_module(gateway)
 
 
 class FakeResponse:
-    def __init__(self, body=None, status_code: int = 200, text: str | None = None):
+    def __init__(self, body=None, status_code: int = 200, text: str | None = None,
+                 lines: list[str] | None = None):
         self._body = body
         self.status_code = status_code
         self.headers = {"content-type": "application/json" if body is not None else "text/plain"}
         self.text = text if text is not None else ("" if body is None else str(body))
+        self._lines = lines or []
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
 
     def json(self):
         if self._body is None:
@@ -63,6 +71,11 @@ def install_transport(monkeypatch, handler):
         async def post(self, url, **kwargs):
             calls.append(("POST", url, kwargs))
             return handler("POST", url, kwargs)
+
+        @asynccontextmanager
+        async def stream(self, method, url, **kwargs):
+            calls.append(("STREAM", url, kwargs))
+            yield handler(method, url, kwargs)
 
     monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
     return calls
@@ -351,3 +364,145 @@ def test_analyze_all_report_valide_fichier_et_instruction(monkeypatch):
             data={"instruction": "   "},
         ).status_code == 400
     assert calls == []
+
+
+# --- Flux SSE temps réel ------------------------------------------------------
+
+
+def parse_sse(text):
+    """Décode un corps SSE en liste de couples (event, data)."""
+    events = []
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        event, data = "message", None
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data = json.loads(line.split(":", 1)[1].strip())
+        events.append((event, data))
+    return events
+
+
+def orchestrator_stream_lines(report):
+    lines = []
+    for event, payload in [
+        ("step", {"service": "vector-db", "status": "running", "detail": "recherche"}),
+        ("step", {"service": "vector-db", "status": "ok", "detail": "3 passages"}),
+        ("step", {"service": "llm-server", "status": "running", "detail": "confirmation"}),
+        ("step", {"service": "llm-server", "status": "ok", "detail": "validée"}),
+        ("step", {"service": "agent-orchestrator", "status": "ok", "detail": "audit ok"}),
+        ("result", report),
+    ]:
+        lines += [f"event: {event}", "data: " + json.dumps(payload, ensure_ascii=False), ""]
+    return lines
+
+
+def test_stream_relaye_les_etapes_reelles_et_trace_dans_mlflow(monkeypatch):
+    report = dict(REPORT, sources=[{"source": "doc", "page": 1, "score": 0.8}])
+    lines = orchestrator_stream_lines(report)
+
+    def handler(method, url, kwargs):
+        if url.startswith(gateway.AUDIO):
+            return FakeResponse(WORKFLOW)
+        if url.startswith(gateway.MLFLOW):
+            if "experiments/search" in url:
+                return FakeResponse({"experiments": [
+                    {"name": "cardio-workflow", "experiment_id": "7"}
+                ]})
+            if "runs/create" in url:
+                return FakeResponse({"run": {"info": {"run_id": "run-9"}}})
+            return FakeResponse({})
+        if "/analyze/stream" in url:
+            return FakeResponse(lines=lines)
+        return FakeResponse(report)
+
+    calls = install_transport(monkeypatch, handler)
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all_report/stream",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+            data={"instruction": "Analyse ce signal et conclus."},
+        )
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    events = parse_sse(response.text)
+    steps = [(item["service"], item["status"])
+             for event, item in events if event == "step"]
+    assert steps == [
+        ("api-gateway", "running"), ("api-gateway", "ok"),
+        ("audio-engine", "running"), ("audio-engine", "degrade"),
+        ("mlflow-server", "running"), ("mlflow-server", "ok"),
+        ("agent-orchestrator", "running"),
+        ("vector-db", "running"), ("vector-db", "ok"),
+        ("llm-server", "running"), ("llm-server", "ok"),
+        ("agent-orchestrator", "ok"),
+    ]
+    result = [item for event, item in events if event == "result"][0]
+    assert result["workflow"] == WORKFLOW
+    assert result["instruction"] == "Analyse ce signal et conclus."
+    assert len(result["workflow_trace"]) == 6
+    assert [item for event, item in events if event == "status"][0]["status"] == "terminated"
+
+    urls = [call[1] for call in calls]
+    assert f"{gateway.ORCH}/analyze/stream" in urls
+    assert f"{gateway.MLFLOW}/api/2.0/mlflow/runs/create" in urls
+    assert f"{gateway.MLFLOW}/api/2.0/mlflow/runs/update" in urls
+    assert any("log-metric" in url for url in urls)
+    assert any("step.vector-db" in str(call[2]) for call in calls)
+
+
+def test_stream_arrete_au_service_indispensable_en_erreur(monkeypatch):
+    calls = install_transport(
+        monkeypatch,
+        lambda method, url, kwargs: FakeResponse({"detail": "panne"}, status_code=503),
+    )
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all_report/stream",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+        )
+
+    events = parse_sse(response.text)
+    errors = [item for event, item in events if event == "error"]
+    assert errors and errors[0]["service"] == "audio-engine"
+    assert errors[0]["indispensable"] is True
+    assert not any(event == "result" for event, _ in events)
+    assert [call[1] for call in calls] == [f"{gateway.AUDIO}/predict_all"]
+
+
+def test_stream_repli_sur_analyze_si_orchestrateur_sans_sse(monkeypatch):
+    report = dict(REPORT, sources=[{"source": "doc", "page": 2, "score": 0.7}],
+                  audit={"passed": True, "warnings": []})
+
+    def handler(method, url, kwargs):
+        if url.startswith(gateway.AUDIO):
+            return FakeResponse(WORKFLOW)
+        if url.startswith(gateway.MLFLOW):
+            if "experiments/search" in url:
+                return FakeResponse({"experiments": []})
+            if "experiments/create" in url:
+                return FakeResponse({"experiment_id": "4"})
+            if "runs/create" in url:
+                return FakeResponse({"run": {"info": {"run_id": "run-2"}}})
+            return FakeResponse({})
+        if method == "STREAM":
+            return FakeResponse(status_code=404)
+        return FakeResponse(report)
+
+    install_transport(monkeypatch, handler)
+    with TestClient(gateway.app) as client:
+        response = client.post(
+            "/analyze_all_report/stream",
+            files={"file": ("signal.wav", b"RIFF", "audio/wav")},
+        )
+
+    events = parse_sse(response.text)
+    steps = [(item["service"], item["status"])
+             for event, item in events if event == "step"]
+    assert ("vector-db", "ok") in steps
+    assert ("llm-server", "ok") in steps
+    assert any(event == "result" for event, _ in events)

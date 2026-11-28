@@ -1,8 +1,12 @@
 import asyncio
+import json
 import os
 import time
+from typing import Any, AsyncIterator
+
 import httpx
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="CardioAgent-Ops API")
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +30,132 @@ SERVICE_STEPS = {
     "vector-db": "Passages RAG (cardio_docs)",
     "llm-server": "Confirmation bornée du rapport",
 }
+REQUIRED_SERVICES = frozenset({"api-gateway", "audio-engine", "agent-orchestrator"})
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+class WorkflowTracker:
+    """Trace le workflow dans MLflow via son API REST (aucun SDK requis).
+
+    Chaque étape réellement traversée est enregistrée comme tag et, lorsqu'une
+    durée est mesurée, comme métrique dans un run ``cardio-workflow``. Une panne
+    de MLflow est signalée dans le flux mais n'interrompt pas le workflow.
+    """
+
+    def __init__(self, client: Any, base: str):
+        self.client = client
+        self.base = base.rstrip("/")
+        self.run_id: str | None = None
+        self.available = True
+        self.steps: list[dict[str, Any]] = []
+
+    async def start(self, instruction: str) -> bool:
+        try:
+            response = await self.client.get(
+                f"{self.base}/api/2.0/mlflow/experiments/search",
+                params={"max_results": 100},
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(f"HTTP {response.status_code}")
+            experiments = (response.json() or {}).get("experiments") or []
+            experiment = next(
+                (item for item in experiments if item.get("name") == "cardio-workflow"), None
+            )
+            experiment_id = experiment.get("experiment_id") if experiment else None
+            if not experiment_id:
+                created = await self.client.post(
+                    f"{self.base}/api/2.0/mlflow/experiments/create",
+                    json={"name": "cardio-workflow"},
+                )
+                experiment_id = (created.json() or {}).get("experiment_id")
+            if not experiment_id:
+                raise RuntimeError("experiment_id indisponible")
+            created = await self.client.post(
+                f"{self.base}/api/2.0/mlflow/runs/create",
+                json={
+                    "experiment_id": experiment_id,
+                    "run_name": "workflow-rapport",
+                    "start_time": int(time.time() * 1000),
+                    "tags": [
+                        {"key": "workflow", "value": "analyze_all_report_stream"},
+                        {"key": "instruction", "value": str(instruction)[:500]},
+                    ],
+                },
+            )
+            run = (created.json() or {}).get("run") or {}
+            self.run_id = (run.get("info") or {}).get("run_id")
+            if not self.run_id:
+                raise RuntimeError("run_id indisponible")
+        except Exception:
+            self.available = False
+            self.run_id = None
+        return self.available
+
+    async def _tag(self, key: str, value: str) -> None:
+        if self.run_id:
+            await self.client.post(
+                f"{self.base}/api/2.0/mlflow/runs/set-tag",
+                json={"run_id": self.run_id, "key": key, "value": str(value)[:500]},
+            )
+
+    async def step(
+        self, service: str, status: str, detail: str = "", duration_ms: float | None = None
+    ) -> None:
+        self.steps.append(
+            {"service": service, "status": status, "detail": detail, "duration_ms": duration_ms}
+        )
+        if not self.run_id or not self.available:
+            return
+        try:
+            await self._tag(f"step.{service}", status)
+            await self._tag(f"detail.{service}", detail)
+            if duration_ms is not None:
+                await self.client.post(
+                    f"{self.base}/api/2.0/mlflow/runs/log-metric",
+                    json={
+                        "run_id": self.run_id,
+                        "key": f"step.{service}.duration_ms",
+                        "value": float(duration_ms),
+                        "timestamp": int(time.time() * 1000),
+                        "step": len(self.steps),
+                    },
+                )
+        except Exception:
+            self.available = False
+
+    async def summary(self, workflow: dict, report: dict) -> None:
+        if not self.run_id or not self.available:
+            return
+        consensus = workflow.get("consensus") or {}
+        try:
+            for key, value in {
+                "prediction": consensus.get("prediction") or "indéterminé",
+                "models_ok": consensus.get("models_ok", 0),
+                "models_total": consensus.get("models_total", 0),
+                "report_status": report.get("status", "inconnu"),
+            }.items():
+                await self._tag(f"result.{key}", value)
+        except Exception:
+            self.available = False
+
+    async def finish(self, status: str) -> None:
+        if not self.run_id or not self.available:
+            return
+        try:
+            await self.client.post(
+                f"{self.base}/api/2.0/mlflow/runs/update",
+                json={
+                    "run_id": self.run_id,
+                    "status": "FINISHED" if status == "terminated" else "FAILED",
+                    "end_time": int(time.time() * 1000),
+                },
+            )
+        except Exception:
+            self.available = False
 
 
 def _workflow_trace(workflow: dict, report: dict, audio_ms: float, orch_ms: float) -> list[dict]:
@@ -134,8 +264,8 @@ def root():
         "status": "ok",
         "docs": "/docs",
         "endpoints": ["/health", "/workflow/services", "/analyze", "/analyze_pcg", "/predict",
-                      "/analyze_all", "/analyze_all_report", "/predict_one", "/models",
-                      "/mlflow/experiments"],
+                      "/analyze_all", "/analyze_all_report", "/analyze_all_report/stream",
+                      "/predict_one", "/models", "/mlflow/experiments"],
     }
 
 @app.get("/health")
@@ -312,6 +442,212 @@ async def analyze_all_report(
     body["workflow_trace"] = _workflow_trace(workflow, body, audio_ms, orch_ms)
     body["gateway_latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
     return body
+
+
+def _sse_frame(event: str, payload: Any) -> str:
+    """Formatte un événement Server-Sent Events."""
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def _stream_report(filename: str, data: bytes, instruction: str) -> AsyncIterator[str]:
+    """Exécute le workflow séquentiellement et émet chaque étape réelle.
+
+    Les événements ``step`` sont produits avant l'appel (``running``) puis après
+    sa réponse (``ok`` / ``erreur`` / état dégradé constaté). Aucune progression
+    n'est simulée : les étapes internes de l'orchestrateur sont relayées depuis
+    son propre flux SSE.
+    """
+    out: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+    started = time.perf_counter()
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        tracker = WorkflowTracker(client, MLFLOW)
+
+        async def emit(event: str, payload: Any) -> None:
+            await out.put({"event": event, "data": payload})
+
+        async def mark(service: str, status: str, detail: str = "",
+                       duration_ms: float | None = None) -> None:
+            step: dict[str, Any] = {
+                "service": service, "status": status, "detail": str(detail)[:200],
+            }
+            if duration_ms is not None:
+                step["duration_ms"] = round(float(duration_ms), 1)
+            await emit("step", step)
+            await tracker.step(service, status, str(detail), duration_ms)
+
+        async def stop(service: str, detail: str) -> str:
+            await mark(service, "erreur", detail)
+            await emit("error", {"service": service, "detail": str(detail)[:300],
+                                 "indispensable": service in REQUIRED_SERVICES})
+            return "error"
+
+        async def worker() -> str:
+            final_status = "error"
+            try:
+                await mark("api-gateway", "running", "Réception du WAV et de l'instruction")
+                await mark("api-gateway", "ok",
+                           f"instruction reçue ({len(instruction)} caractères)")
+
+                await mark("audio-engine", "running", "Prétraitement et 5 prédictions")
+                audio_started = time.perf_counter()
+                try:
+                    r1 = await client.post(
+                        f"{AUDIO}/predict_all",
+                        params={"families": ",".join(ALL_FAMILIES)},
+                        files={"file": (filename, data, "audio/wav")},
+                    )
+                except Exception as error:
+                    return await stop("audio-engine", f"audio-engine injoignable : {error}")
+                if r1.status_code >= 400:
+                    return await stop("audio-engine", f"HTTP {r1.status_code}")
+                workflow = r1.json()
+                audio_ms = (time.perf_counter() - audio_started) * 1000
+                analysis = workflow.get("analysis") or []
+                executed = {row.get("key") for row in analysis if row.get("key")}
+                missing = [key for key in ALL_FAMILIES if key not in executed]
+                if missing:
+                    return await stop(
+                        "audio-engine", "modèles non exécutés : " + ", ".join(missing)
+                    )
+                ok_count = sum(1 for row in analysis if row.get("status") == "ok")
+                consensus = workflow.get("consensus") or {}
+                await mark(
+                    "audio-engine", "ok" if ok_count == len(analysis) else "degrade",
+                    f"{ok_count}/{len(analysis)} modèles · vote "
+                    f"{consensus.get('prediction', 'indéterminé')}",
+                    audio_ms,
+                )
+
+                await tracker.start(instruction)
+                await mark("mlflow-server", "running", "Tracking des étapes du workflow")
+                if tracker.available:
+                    for previous in list(tracker.steps[:-1]):
+                        await tracker.step(previous["service"], previous["status"],
+                                           previous["detail"], previous["duration_ms"])
+                    await mark("mlflow-server", "ok", "run cardio-workflow ouvert")
+                else:
+                    await mark("mlflow-server", "erreur", "MLflow injoignable, tracking ignoré")
+
+                await mark("agent-orchestrator", "running",
+                           "Graphe Analyste → Cardiologue → Auditeur")
+                orch_started = time.perf_counter()
+                payload = _report_payload(workflow, instruction)
+                result: dict[str, Any] = {"body": None, "error": None, "fallback": False}
+
+                async def forward(block: list[str]) -> None:
+                    event = "message"
+                    chunks: list[str] = []
+                    for line in block:
+                        if line.startswith("event:"):
+                            event = line.split(":", 1)[1].strip()
+                        elif line.startswith("data:"):
+                            chunks.append(line.split(":", 1)[1].strip())
+                    raw = "\n".join(chunks)
+                    try:
+                        data_event = json.loads(raw) if raw else {}
+                    except ValueError:
+                        return
+                    if event == "step" and isinstance(data_event, dict):
+                        await mark(
+                            str(data_event.get("service") or "agent-orchestrator"),
+                            str(data_event.get("status") or "running"),
+                            str(data_event.get("detail") or ""),
+                        )
+                    elif event == "result" and isinstance(data_event, dict):
+                        result["body"] = data_event
+                    elif event == "error" and isinstance(data_event, dict):
+                        result["error"] = str(data_event.get("detail") or "erreur orchestrateur")
+
+                try:
+                    async with client.stream(
+                        "POST", f"{ORCH}/analyze/stream", json=payload
+                    ) as r2:
+                        if r2.status_code in (404, 405):
+                            result["fallback"] = True
+                        elif r2.status_code >= 400:
+                            return await stop("agent-orchestrator", f"HTTP {r2.status_code}")
+                        else:
+                            buffer: list[str] = []
+                            async for line in r2.aiter_lines():
+                                if line.strip() == "":
+                                    if buffer:
+                                        await forward(buffer)
+                                        buffer = []
+                                else:
+                                    buffer.append(line)
+                            if buffer:
+                                await forward(buffer)
+                except Exception as error:
+                    return await stop("agent-orchestrator",
+                                      f"flux orchestrateur indisponible : {type(error).__name__}: {error}")
+
+                if result["error"]:
+                    return await stop("agent-orchestrator", result["error"])
+
+                if result["fallback"] or result["body"] is None:
+                    try:
+                        r2 = await client.post(f"{ORCH}/analyze", json=payload)
+                    except Exception as error:
+                        return await stop("agent-orchestrator", f"orchestrateur injoignable : {error}")
+                    if r2.status_code >= 400:
+                        return await stop("agent-orchestrator", f"HTTP {r2.status_code}")
+                    result["body"] = r2.json()
+                    orch_ms = (time.perf_counter() - orch_started) * 1000
+                    for row in _workflow_trace(workflow, result["body"], audio_ms, orch_ms)[3:]:
+                        await mark(row["service"], row["status"], row["detail"],
+                                   row["duration_ms"])
+
+                orch_ms = (time.perf_counter() - orch_started) * 1000
+                body = dict(result["body"])
+                body["instruction"] = instruction
+                body["workflow"] = workflow
+                body["workflow_trace"] = _workflow_trace(workflow, body, audio_ms, orch_ms)
+                body["gateway_latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
+                await tracker.summary(workflow, body)
+                await emit("result", body)
+                await emit("status", {"status": "terminated",
+                                      "detail": "Workflow terminé", "services": list(SERVICE_ORDER)})
+                final_status = "terminated"
+                return final_status
+            except Exception as error:
+                await emit("error", {"service": "api-gateway",
+                                     "detail": f"{type(error).__name__}: {error}",
+                                     "indispensable": True})
+                return "error"
+            finally:
+                await tracker.finish(final_status)
+                await out.put(None)
+
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await out.get()
+                if item is None:
+                    break
+                yield _sse_frame(item["event"], item["data"])
+        finally:
+            if not task.done():
+                task.cancel()
+
+
+@app.post("/analyze_all_report/stream")
+async def analyze_all_report_stream(
+    file: UploadFile = File(...),
+    instruction: str = Form(DEFAULT_INSTRUCTION),
+):
+    """Workflow 5 modèles + rapport, diffusé étape par étape en SSE."""
+    if not file.filename.lower().endswith(".wav"):
+        raise HTTPException(400, "Fichier .wav requis")
+    instruction = (instruction or "").strip()
+    if not instruction:
+        raise HTTPException(400, "Une instruction est requise pour générer le rapport.")
+    data = await file.read()
+    return StreamingResponse(
+        _stream_report(file.filename, data, instruction),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
 
 
 @app.post("/predict_one")

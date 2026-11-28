@@ -389,20 +389,18 @@ body::before{
 .report-answer{margin:0;padding:16px 18px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);color:var(--ink-2);font-size:.82rem;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;max-height:620px;overflow:auto}
 .report-unavailable{padding:16px 18px;border:1px dashed var(--warn-line);border-radius:13px;background:var(--warn-bg);color:var(--ink-2);font-size:.8rem;line-height:1.65}
 .workflow-panel{margin-top:20px;scroll-margin-top:86px}
-.workflow-track{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
-.workflow-node{position:relative;padding:14px 14px 13px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);overflow:hidden}
-.workflow-node::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line-strong)}
-.workflow-node.is-ok::after{background:#2f8f6b}
-.workflow-node.is-degraded::after,.workflow-node.is-sans_donnee::after,.workflow-node.is-non_sollicite::after{background:var(--warn)}
-.workflow-node.is-indisponible::after,.workflow-node.is-bloque::after{background:var(--danger)}
-.workflow-node-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.workflow-node-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--petrol-050);color:var(--petrol-700);font-size:.68rem;font-weight:800}
-.workflow-node-name{margin-left:6px;color:var(--navy-900);font-size:.78rem;font-weight:800;word-break:break-word}
-.workflow-node-status{margin-left:auto;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:.62rem;font-weight:800;white-space:nowrap}
-.workflow-node.is-ok .workflow-node-status{border-color:#b9e2d2;color:#217a5b;background:#f0faf6}
-.workflow-node.is-degraded .workflow-node-status,.workflow-node.is-sans_donnee .workflow-node-status{border-color:var(--warn-line);color:var(--warn);background:var(--warn-bg)}
-.workflow-node-step{margin:10px 0 4px;color:var(--ink-2);font-size:.73rem;font-weight:700;line-height:1.45}
-.workflow-node-detail{margin:0;color:var(--muted);font-size:.69rem;line-height:1.5;overflow-wrap:anywhere}
+.workflow-track{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px}
+.workflow-node{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.workflow-node.is-running{border-color:var(--petrol-600);background:var(--petrol-050)}
+.workflow-node.is-ok{border-color:#b9e2d2;background:#f0faf6}
+.workflow-node.is-error{border-color:var(--danger);background:#fdf1f1}
+.workflow-node-name{color:var(--navy-900);font-size:.76rem;font-weight:800;word-break:break-word}
+.workflow-node-status{padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:.62rem;font-weight:800;white-space:nowrap}
+.workflow-node.is-running .workflow-node-status{border-color:var(--petrol-600);color:var(--petrol-700)}
+.workflow-node.is-ok .workflow-node-status{border-color:#b9e2d2;color:#217a5b}
+.workflow-node.is-error .workflow-node-status{border-color:var(--danger);color:var(--danger)}
+.workflow-progress{height:5px;margin-top:16px;border-radius:999px;background:var(--petrol-050);overflow:hidden}
+.workflow-progress>span{display:block;height:100%;width:0;border-radius:999px;background:var(--petrol-600);transition:width .25s ease}
 .chat-log{display:grid;gap:12px;max-height:430px;overflow:auto;margin-top:16px;padding:3px 2px 3px 3px}
 .chat-empty{padding:26px 18px;text-align:center;border:1px dashed var(--line-strong);border-radius:14px;background:var(--surface-2);color:var(--muted);font-size:.8rem;line-height:1.65}
 .chat-msg{padding:13px 15px;border:1px solid var(--line);border-radius:14px;background:#fff}
@@ -766,13 +764,13 @@ body::before{
       <header class="card-head">
         <div>
           <span class="section-kicker">Passage du workflow · 6 services</span>
-          <h2 id="workflowTitle">Traçabilité de l'analyse</h2>
-          <p>État réel des services traversés : passerelle, moteur audio, métadonnées des modèles, agents, recherche documentaire et LLM.</p>
+          <h2 id="workflowTitle">Progression de l'analyse</h2>
+          <p>Chaque service passe en « En analyse » puis en « OK » lorsque le backend a réellement terminé son traitement.</p>
         </div>
         <span class="consensus-badge" id="workflowBadge">—</span>
       </header>
       <div class="workflow-track" id="workflowTrack" aria-live="polite"></div>
-      <p class="quality-note">Les durées et statuts affichés après une analyse proviennent de la réponse de la passerelle. Avant analyse, l'état est relevé via <span class="mono">/workflow/services</span>.</p>
+      <div class="workflow-progress" aria-hidden="true"><span id="workflowProgressBar"></span></div>
     </section>
 
     <section class="card generated-report" id="generatedReport" hidden aria-labelledby="generatedReportTitle">
@@ -805,6 +803,7 @@ const state = {
   view: [0, 1], ymax: 1, hover: null, drag: null,
   service: null, serviceHealth: null, candidates: [], probePromise: null,
   predicting: false, result: null, timer: null, startedAt: 0,
+  workflowStatus: {}, workflowDone: null,
   chatBusy: false
 };
 
@@ -900,11 +899,11 @@ function setPredictingUI(on){
   $('modelStrip').classList.toggle('is-running', on);
   if (on) {
     state.startedAt = Date.now();
-    setRunStatus('Analyse en cours — SVM, arbre de décision et CNN…', 'busy');
+    setRunStatus('Analyse en cours — les cinq modèles puis le rapport…', 'busy');
     clearInterval(state.timer);
     state.timer = setInterval(() => {
       const seconds = Math.max(0, Math.round((Date.now() - state.startedAt) / 1000));
-      setRunStatus(`Analyse en cours · ${seconds} s — SVM, arbre de décision et CNN…`, 'busy');
+      setRunStatus(`Analyse en cours · ${seconds} s — cinq modèles puis rapport…`, 'busy');
     }, 1000);
   } else {
     clearInterval(state.timer);
@@ -1172,6 +1171,7 @@ async function loadFile(file){
     setHidden('readout', true);
     renderStats({...stats, sr: parsed.sr, ch: parsed.ch, bits: parsed.bits, bytes: file.size, duration: parsed.sig.length / parsed.sr});
     resetResults();
+    resetWorkflow();
     setStep(2);
     updateActionState();
     setRunStatus('Fichier chargé · prêt pour l\u2019analyse.', 'info');
@@ -1564,73 +1564,135 @@ function reportBases(){
   return bases.filter((base, index, all) => all.indexOf(base) === index);
 }
 const WORKFLOW_SERVICES = [
-  {key:'api-gateway', label:'api-gateway', step:'Réception WAV + instruction'},
-  {key:'audio-engine', label:'audio-engine', step:'Prétraitement + 5 prédictions'},
-  {key:'mlflow-server', label:'mlflow-server', step:'Métadonnées des modèles'},
-  {key:'agent-orchestrator', label:'agent-orchestrator', step:'Agent rapport (3 nœuds)'},
-  {key:'vector-db', label:'vector-db', step:'Passages RAG (cardio_docs)'},
-  {key:'llm-server', label:'llm-server', step:'Confirmation bornée'}
+  {key:'api-gateway', label:'api-gateway'},
+  {key:'audio-engine', label:'audio-engine'},
+  {key:'mlflow-server', label:'mlflow-server'},
+  {key:'agent-orchestrator', label:'agent-orchestrator'},
+  {key:'vector-db', label:'vector-db'},
+  {key:'llm-server', label:'llm-server'}
 ];
-function workflowLabel(status){
-  const labels = {
-    ok:'OK', degrade:'Dégradé', indisponible:'Indisponible', bloque:'Bloqué',
-    sans_donnee:'Sans donnée', non_sollicite:'Non sollicité', inconnu:'Inconnu',
-    attente:'En attente', down:'Indisponible', checking:'Vérification'
-  };
-  return labels[status] || status || '—';
+const WORKFLOW_LABELS = {
+  attente:'En attente', running:'En analyse', ok:'OK', erreur:'Erreur', error:'Erreur',
+  down:'Erreur', indisponible:'Erreur', bloque:'Bloqué', degrade:'OK (partiel)',
+  sans_donnee:'Sans donnée', non_sollicite:'Non sollicité', inconnu:'Inconnu'
+};
+const WORKFLOW_DONE_STATUSES = ['ok','degrade','sans_donnee','non_sollicite','bloque'];
+function workflowNodeClass(status){
+  if (status === 'ok') return 'is-ok';
+  if (status === 'running' || status === 'checking') return 'is-running';
+  if (['erreur','error','down','indisponible','bloque'].includes(status)) return 'is-error';
+  return '';
 }
-function renderWorkflow(trace, snapshot){
-  const rows = {};
-  for (const service of (snapshot && snapshot.services) ? Object.keys(snapshot.services) : []) {
-    rows[service] = snapshot.services[service];
-  }
-  for (const item of (Array.isArray(trace) ? trace : [])) rows[item.service] = item;
+function renderWorkflow(){
+  const rows = state.workflowStatus || {};
   const track = $('workflowTrack');
   if (!track) return;
-  track.innerHTML = WORKFLOW_SERVICES.map((service, index) => {
-    const row = rows[service.key] || {};
-    const status = String(row.status || 'attente');
-    const cls = status === 'ok' ? 'is-ok'
-      : /^(degrade|sans_donnee|non_sollicite|inconnu|checking)$/.test(status) ? 'is-degraded'
-      : /^(indisponible|bloque|down)$/.test(status) ? 'is-indisponible' : '';
-    const detail = row.detail || (row.points != null ? row.points + ' passages · ' + (row.collection || 'cardio_docs')
-      : row.model ? String(row.model)
-      : row.http != null ? 'HTTP ' + row.http
-      : row.error ? String(row.error)
-      : 'Statut relevé avant analyse');
-    const duration = row.duration_ms != null ? ' · ' + esc(fmt(Number(row.duration_ms), 0)) + ' ms' : '';
-    return `<article class="workflow-node ${cls}">
-      <div class="workflow-node-head"><span class="workflow-node-num">${index + 1}</span><span class="workflow-node-name">${esc(service.label)}</span><span class="workflow-node-status">${esc(workflowLabel(status))}</span></div>
-      <p class="workflow-node-step">${esc(service.step)}</p>
-      <p class="workflow-node-detail">${esc(String(detail))}${duration}</p>
+  track.innerHTML = WORKFLOW_SERVICES.map(service => {
+    const status = String(rows[service.key] || 'attente');
+    return `<article class="workflow-node ${workflowNodeClass(status)}">
+      <span class="workflow-node-name">${esc(service.label)}</span>
+      <span class="workflow-node-status">${esc(WORKFLOW_LABELS[status] || status)}</span>
     </article>`;
   }).join('');
+  const done = WORKFLOW_SERVICES.filter(service =>
+    WORKFLOW_DONE_STATUSES.includes(String(rows[service.key] || ''))).length;
+  const bar = $('workflowProgressBar');
+  if (bar) bar.style.width = Math.round(done / WORKFLOW_SERVICES.length * 100) + '%';
   const badge = $('workflowBadge');
   if (!badge) return;
   badge.classList.remove('is-success','is-warning','is-danger');
-  if (Array.isArray(trace)) {
-    const ok = trace.filter(item => item.status === 'ok').length;
-    badge.classList.add(ok === trace.length ? 'is-success' : 'is-warning');
-    badge.textContent = ok + '/' + trace.length + ' services';
-  } else if (snapshot) {
-    badge.classList.add('is-warning');
-    badge.textContent = 'État relevé';
+  if (state.workflowDone === 'terminated') {
+    const failed = WORKFLOW_SERVICES.some(service =>
+      ['erreur','error','down','indisponible','bloque'].includes(String(rows[service.key] || '')));
+    badge.classList.add(failed ? 'is-warning' : 'is-success');
+    badge.textContent = failed ? 'Terminé (partiel)' : 'Terminé';
+  } else if (state.workflowDone === 'error') {
+    badge.classList.add('is-danger');
+    badge.textContent = 'Arrêté';
   } else {
-    badge.textContent = 'En attente';
+    badge.classList.add('is-warning');
+    badge.textContent = done + '/' + WORKFLOW_SERVICES.length;
   }
 }
-async function loadWorkflowStatus(){
+function resetWorkflow(){
+  state.workflowStatus = Object.fromEntries(WORKFLOW_SERVICES.map(service => [service.key, 'attente']));
+  state.workflowDone = null;
+  renderWorkflow();
+}
+function applyWorkflowEvent(event){
+  if (!event || !event.service) return;
+  state.workflowStatus[event.service] = event.status;
+  renderWorkflow();
+}
+function applyWorkflowTrace(trace){
+  for (const item of (Array.isArray(trace) ? trace : [])) {
+    if (item && item.service) state.workflowStatus[item.service] = item.status;
+  }
+  state.workflowDone = 'terminated';
+  renderWorkflow();
+}
+function parseSseBlock(block, handle){
+  let event = 'message';
+  const chunks = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) chunks.push(line.slice(5).trim());
+  }
+  if (!chunks.length) return;
+  let data;
+  try { data = JSON.parse(chunks.join('\n')); } catch (error) { return; }
+  handle(event, data);
+}
+async function requestReportStream(file, instruction, onStatus){
   for (const base of reportBases()) {
     try {
-      const response = await fetchWithTimeout(base + '/workflow/services', {}, 15000);
-      const body = await readResponse(response);
-      if (response.ok && body && body.services) {
-        renderWorkflow(null, body);
-        return body;
+      const form = new FormData();
+      form.append('file', file, file.name);
+      form.append('instruction', instruction);
+      const response = await fetchWithTimeout(
+        base + '/analyze_all_report/stream', {method:'POST', body:form}, 300000);
+      if (response.status === 404 || response.status === 405) return null;
+      if (!response.ok) {
+        const body = await readResponse(response);
+        throw new UserError(detailText(errorDetail(body, 'HTTP ' + response.status)) || ('Erreur HTTP ' + response.status));
       }
-    } catch (error) { /* on essaie la base suivante */ }
+      if (!response.body || typeof response.body.getReader !== 'function') return null;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      const handle = (event, data) => {
+        if (event === 'step' || event === 'status') onStatus(event, data);
+        else if (event === 'result') state.streamedReport = data;
+        else if (event === 'error') state.streamedError = data;
+      };
+      let buffer = '';
+      state.streamedReport = null;
+      state.streamedError = null;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, {stream:true});
+        let index;
+        while ((index = buffer.indexOf('\n\n')) !== -1) {
+          parseSseBlock(buffer.slice(0, index), handle);
+          buffer = buffer.slice(index + 2);
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) parseSseBlock(buffer, handle);
+      if (state.streamedError) {
+        throw new UserError(detailText(state.streamedError.detail) || 'Le workflow a été interrompu.');
+      }
+      const result = state.streamedReport;
+      if (!result || !Array.isArray(result.workflow) || result.workflow.analysis.length !== 5) {
+        throw new Error('Le service n\u2019a pas renvoyé les 5 prédictions attendues.');
+      }
+      state.service = state.service || (orderedCandidates().find(candidate => candidate.base === base) || null);
+      return result;
+    } catch (error) {
+      if (error instanceof UserError) throw error;
+      // erreur réseau : on essaie une autre base, puis le mode non diffusé
+    }
   }
-  renderWorkflow(null);
   return null;
 }
 async function requestReport(file, instruction){
@@ -1708,25 +1770,45 @@ async function runPrediction(){
   clearFileError();
   setPredictingUI(true);
   setHidden('generatedReport', true);
-  await loadWorkflowStatus().catch(() => {});
+  resetWorkflow();
   try {
     if (!state.service) await probeServices();
     let workflow = null;
     let report = null;
     let reportError = null;
     try {
-      const combined = await requestReport(file, instruction);
-      report = combined.body;
-      workflow = combined.workflow;
+      const streamed = await requestReportStream(file, instruction, (event, data) => {
+        if (event === 'step') applyWorkflowEvent(data);
+        else if (event === 'status' && data && data.status === 'terminated') {
+          state.workflowDone = 'terminated';
+          renderWorkflow();
+        }
+      });
+      if (streamed) {
+        report = streamed;
+        workflow = streamed.workflow;
+      }
     } catch (error) {
       reportError = friendlyError(error);
+      state.workflowDone = 'error';
+      renderWorkflow();
     }
     if (!workflow) {
       const result = await requestPrediction(file);
       workflow = result.data;
+      if (!report) {
+        try {
+          const combined = await requestReport(file, instruction);
+          report = combined.body;
+        } catch (error) {
+          reportError = friendlyError(error);
+        }
+      }
+    }
+    if (report && report.workflow_trace && state.workflowDone !== 'terminated') {
+      applyWorkflowTrace(report.workflow_trace);
     }
     renderResults(workflow);
-    renderWorkflow(report && report.workflow_trace ? report.workflow_trace : null);
     renderGeneratedReport(report, reportError, instruction);
     setPredictingUI(false);
     setRunStatus(report
@@ -1739,6 +1821,8 @@ async function runPrediction(){
   } catch (error) {
     console.error(error);
     setPredictingUI(false);
+    state.workflowDone = 'error';
+    renderWorkflow();
     setRunStatus(friendlyError(error), 'error');
     showToast('L\u2019analyse n\u2019a pas pu aboutir. Vérifiez le service puis réessayez.');
   }
@@ -2182,7 +2266,6 @@ function setupChat(){
       }
     });
   }
-  renderWorkflow(null);
 }
 
 function init(){
@@ -2192,7 +2275,7 @@ function init(){
   setRunStatus('Prêt à analyser un signal.', 'info');
   setupChat();
   probeServices();
-  loadWorkflowStatus().catch(() => {});
+  resetWorkflow();
   window.addEventListener('load', () => { drawBase(); drawOverlay(); });
   window.addEventListener('focus', () => {
     if (!state.service && !state.probing) probeServices();

@@ -566,6 +566,7 @@ Erreurs fréquentes :
 | `POST` | `/predict` | proxy direct vers l'audio-engine `/predict` (ONNX) |
 | `POST` | `/analyze_all?families=svm,tree,cnn,tl,hybrid` | proxy vers `/predict_all` |
 | `POST` | `/analyze_all_report` | **5 modèles obligatoires puis rapport** (`file` + `instruction`) |
+| `POST` | `/analyze_all_report/stream` | même workflow, diffusé en **SSE** (`step`, `error`, `result`, `status`) |
 | `POST` | `/predict_one?family=svm` | proxy vers `/predict_one` |
 | `POST` | `/analyze` | proxy JSON vers l'orchestrateur (question, score audio ou `mode=report`) |
 | `POST` | `/analyze_pcg` | ONNX puis orchestrateur (`/analyze`) |
@@ -582,6 +583,10 @@ curl.exe -s -X POST "http://127.0.0.1:8085/analyze_all_report" `
   -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav" `
   -F "instruction=Analyse ce signal cardiaque et génère un rapport détaillé."
 
+curl.exe -s -N -X POST "http://127.0.0.1:8085/analyze_all_report/stream" `
+  -F "file=@ourdataset/train/abnormal/112_1306243000964_A.wav" `
+  -F "instruction=Analyse ce signal cardiaque et génère un rapport détaillé."
+
 curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
   -F "file=@ourdataset/train/normal/101_1305030823364_B.wav"
 ```
@@ -593,6 +598,7 @@ curl.exe -s -X POST "http://127.0.0.1:8085/predict_one?family=tree" `
 | `GET` | `/` | liste des agents et endpoints |
 | `GET` | `/health` | état de Qdrant, du LLM et de la collection |
 | `POST` | `/analyze` | question libre, payload audio ou rapport (`mode=report`, `workflow`) ; réponse auditée Pydantic |
+| `POST` | `/analyze/stream` | flux SSE des nœuds réellement exécutés par le graphe (`step`, `result`, `error`) |
 
 Requête minimale :
 
@@ -685,18 +691,27 @@ Fonctionnement :
   `localhost:8085` (gateway), `127.0.0.1:8085`, `localhost:8001` (audio-engine),
   `127.0.0.1:8001`, puis l'origine courante ;
 - dépôt ou sélection d'un **WAV**, puis saisie facultative d'une **instruction** de rapport ;
-- appel de `/analyze_all_report` (gateway) : les 5 modèles reçoivent le même signal prétraité,
-  puis l'agent rédige le rapport ; repli sur `/analyze_all` ou `/predict_all` si cette route
-  n'est pas disponible ;
+- appel de `/analyze_all_report/stream` (gateway) : les 5 modèles reçoivent le même signal
+  prétraité, puis l'agent rédige le rapport ; repli sur `/analyze_all_report`, `/analyze_all`
+  ou `/predict_all` si le flux n'est pas disponible ;
 - affichage des cinq cartes de résultats, du **consensus**, des divergences, des métriques de
   référence et des détails techniques (probabilités par segment, caractéristiques moyennes) ;
 - panneau **Rapport généré** : prédictions, classification globale, scores, caractéristiques,
   comparaison, interprétation et conclusion documentée répondant à l'instruction. Le rapport n'est
   produit qu'après les 5 prédictions et n'invente aucune valeur ; les modèles sont validés sur PCG,
   pas ECG. Une instruction hors contexte est bloquée avant tout appel LLM ;
-- panneau **Workflow · 6 services** : état et durées réels du passage dans `api-gateway`,
-  `audio-engine`, `mlflow-server`, `agent-orchestrator`, `vector-db` et `llm-server`
-  (`GET /workflow/services` avant analyse, trace incluse dans la réponse de rapport) ;
+- panneau **Progression du workflow · 6 services** : dès la sélection du WAV, les lignes
+  `api-gateway`, `audio-engine`, `mlflow-server`, `agent-orchestrator`, `vector-db` et
+  `llm-server` s'affichent en « En attente ». Au lancement, les événements SSE font passer le
+  service courant en « En analyse » puis en « OK » après la réponse réelle du backend ; une
+  panne indispensable affiche « Erreur » et arrête la suite. La barre progresse à chaque étape
+  achevée ; le badge « Terminé » s'affiche à la fin réelle uniquement si aucun service n'a échoué
+  (sinon « Terminé (partiel) » ou « Arrêté »). Les états viennent des appels exécutés et des
+  nœuds du graphe, jamais d'une animation.
+- **Tracking MLflow** : chaque analyse diffusée ouvre un run dans l'expérience
+  `cardio-workflow`. Les tags `step.<service>` / `detail.<service>` et la métrique de durée
+  mesurée sont écrits au fur et à mesure ; le run est clôturé `FINISHED` ou `FAILED`. Une
+  panne de MLflow est signalée dans le flux mais n'interrompt pas le rapport.
 - panneau **Chat RAG** : questions via `POST /analyze`, réponses sourcées, audit, garde-fous et
   refus déterministes affichés dans l'interface.
 

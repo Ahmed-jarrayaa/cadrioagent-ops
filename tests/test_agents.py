@@ -563,3 +563,58 @@ def test_root_orchestrateur():
     body = TestClient(app).get("/").json()
     assert body["service"] == "agent-orchestrator"
     assert body["graph"] == ["analyste", "cardiologue_rag", "auditeur"]
+
+
+# --- Événements réels du graphe (SSE) ----------------------------------------
+
+
+def test_orchestrateur_emet_les_etapes_reelles_du_rapport():
+    events = []
+    llm = FakeLLM(
+        "PREDICTION=abnormal; MODELS_OK=4; MODELS_TOTAL=5; "
+        "VOTES_NORMAL=1; VOTES_ABNORMAL=3; DIVERGENCES=1"
+    )
+    response = _orchestrator(llm=llm).analyze(_report_request(), emit=events.append)
+    sequence = [(item["service"], item["status"]) for item in events]
+
+    assert response.status == "ok"
+    assert ("agent-orchestrator", "running") in sequence
+    assert ("vector-db", "running") in sequence
+    assert ("vector-db", "ok") in sequence
+    assert ("llm-server", "running") in sequence
+    assert ("llm-server", "ok") in sequence
+    assert sequence[-1] == ("agent-orchestrator", "ok")
+    assert llm.calls
+
+
+def test_refus_emet_un_blocage_avant_rag_et_llm():
+    events = []
+    llm = FakeLLM()
+    response = _orchestrator(llm=llm).analyze(
+        _report_request(question="Donne-moi la recette du gateau."), emit=events.append
+    )
+    sequence = [(item["service"], item["status"]) for item in events]
+
+    assert response.status == "refused"
+    assert llm.calls == []
+    assert ("vector-db", "bloque") in sequence
+    assert ("llm-server", "bloque") in sequence
+
+
+def test_endpoint_analyze_stream_diffuse_etapes_et_resultat():
+    app = create_app(
+        retriever=FakeRetriever([B1_RESULT]),
+        llm=FakeLLM(GROUNDED_ANSWER),
+        settings=Settings(llm_url="http://test", qdrant_url="http://test"),
+    )
+    response = TestClient(app).post(
+        "/analyze/stream", json={"question": "Qu'est-ce que le premier bruit B1 ?"}
+    )
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    assert "event: step" in response.text
+    assert "event: result" in response.text
+    assert '"service": "vector-db"' in response.text
+    assert '"service": "llm-server"' in response.text
+    assert '"answer"' in response.text

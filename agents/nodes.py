@@ -93,6 +93,13 @@ AUDIO_QUERY = {
 }
 
 
+def _emit(state: AnalysisState, service: str, status: str, detail: str = "") -> None:
+    """Émet un événement réel d'étape vers le flux SSE quand un callback est fourni."""
+    callback = state.get("emit")
+    if callable(callback):
+        callback({"service": service, "status": status, "detail": detail})
+
+
 def normalize_question(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -191,6 +198,7 @@ def extractive_answer(results: list[dict[str, Any]], language: str) -> str:
 
 def analyste_node(state: AnalysisState) -> dict[str, Any]:
     """Agent 1 : normalise, détecte la langue et qualifie l'intention."""
+    _emit(state, "agent-orchestrator", "running", "Analyste : qualification de l'instruction")
     question = normalize_question(state.get("question", ""))
     language = state.get("language") or detect_language(question)
     if language not in {"fr", "en"}:
@@ -239,6 +247,7 @@ def report_cardiologue_node(
     results: list[dict[str, Any]] = []
     context = ""
 
+    _emit(state, "vector-db", "running", "Recherche dans cardio_docs")
     try:
         results = retriever.retrieve(
             state.get("retrieval_query") or AUDIO_QUERY[language],
@@ -247,6 +256,10 @@ def report_cardiologue_node(
     except Exception as error:
         issues.append(f"rag_unavailable:{type(error).__name__}")
         warnings.append("report_without_passages")
+        _emit(state, "vector-db", "erreur", type(error).__name__)
+    else:
+        _emit(state, "vector-db", "ok" if results else "sans_donnee",
+              f"{len(results)} passage(s) récupéré(s)")
     if results:
         from rag_engine.retrieve import format_context
 
@@ -257,11 +270,13 @@ def report_cardiologue_node(
     status = "ok" if context and not issues else "degraded"
     if context and not issues:
         prompt = build_report_prompt(instruction, facts, context, language)
+        _emit(state, "llm-server", "running", "Confirmation structurée du rapport")
         try:
             confirmation = llm.generate(prompt, report_system_prompt(language))
             if "OUT_OF_CONTEXT" in (confirmation or "").upper():
                 message = canonical_answer(language, "out_of_scope")
                 warnings.append("llm_out_of_context")
+                _emit(state, "llm-server", "bloque", "instruction hors contexte")
                 return {
                     "answer": message,
                     "draft_answer": message,
@@ -278,9 +293,15 @@ def report_cardiologue_node(
             if not structured_confirmation_matches(confirmation, workflow):
                 status = "degraded"
                 warnings.append("llm_confirmation_rejected")
+                _emit(state, "llm-server", "degrade", "confirmation rejetée")
+            else:
+                _emit(state, "llm-server", "ok", "confirmation validée")
         except Exception as error:
             status = "degraded"
             issues.append(f"llm_unavailable:{type(error).__name__}")
+            _emit(state, "llm-server", "erreur", type(error).__name__)
+    else:
+        _emit(state, "llm-server", "non_sollicite", "aucun appel LLM")
 
     interpretation = deterministic_interpretation(workflow, language)
     conclusion = document_conclusion(workflow, results, language, instruction)
@@ -309,6 +330,8 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
 
         if intent in {"diagnosis", "prescription", "emergency", "out_of_scope"}:
             message = canonical_answer(language, intent)
+            _emit(state, "vector-db", "bloque", "refus déterministe avant recherche")
+            _emit(state, "llm-server", "bloque", "refus déterministe avant LLM")
             return {
                 "answer": message,
                 "draft_answer": message,
@@ -324,9 +347,11 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
         if state.get("mode") == "report":
             return report_cardiologue_node(state, retriever, llm, settings)
 
+        _emit(state, "vector-db", "running", "Recherche dans la collection documentaire")
         try:
             results = retriever.retrieve(state.get("retrieval_query") or state["question"], state.get("top_k", settings.top_k))
         except Exception as error:  # index indisponible : abstention, jamais d'invention
+            _emit(state, "vector-db", "erreur", type(error).__name__)
             message = canonical_answer(language, "unavailable")
             return {
                 "answer": message,
@@ -339,6 +364,7 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
                 "issues": [f"rag_unavailable:{type(error).__name__}"],
             }
 
+        _emit(state, "vector-db", "ok", f"{len(results)} passage(s) récupéré(s)")
         if not results:
             message = canonical_answer(language, "abstention")
             return {
@@ -357,14 +383,17 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
         prompt = build_user_prompt(
             state["question"], context, language, state.get("patient_context")
         )
+        _emit(state, "llm-server", "running", "Rédaction sourcée")
         try:
             answer = llm.generate(prompt, system_prompt(language))
             status = "ok"
             issues: list[str] = []
+            _emit(state, "llm-server", "ok", "réponse générée")
         except Exception as error:
             answer = extractive_answer(results, language)
             status = "degraded"
             issues = [f"llm_unavailable:{type(error).__name__}"]
+            _emit(state, "llm-server", "erreur", type(error).__name__)
 
         return {
             "answer": answer,
@@ -380,7 +409,7 @@ def make_cardiologue_node(retriever: Retriever, llm: LLM, settings: Settings):
     return cardiologue_node
 
 
-def auditeur_node(state: AnalysisState) -> dict[str, Any]:
+def _auditeur_node_impl(state: AnalysisState) -> dict[str, Any]:
     """Agent 3 : vérifie ancrage, refus et avertissements ; corrige si besoin."""
     language = state.get("language", "fr")
     intent = state.get("intent", "knowledge")
@@ -494,3 +523,15 @@ def auditeur_node(state: AnalysisState) -> dict[str, Any]:
         "refusal_applied": status == "refused",
         "emergency_redirect": False,
     }
+
+
+def auditeur_node(state: AnalysisState) -> dict[str, Any]:
+    """Termine le graphe et signale l'état final réel de l'orchestrateur."""
+    result = _auditeur_node_impl(state)
+    final_status = result.get("status", "ok")
+    emitted = (
+        "ok" if final_status in {"ok", "degraded", "abstained"} else
+        "refused" if final_status == "refused" else "erreur"
+    )
+    _emit(state, "agent-orchestrator", emitted, f"audit {final_status}")
+    return result

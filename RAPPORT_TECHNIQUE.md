@@ -90,16 +90,29 @@ n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un profession
   derniers via la santé de l'orchestrateur). La réponse de `/analyze_all_report` contient en plus
   `workflow_trace` (statut, détail et durée mesurée pour chaque service). L'interface a supprimé
   le panneau « Jalons 3 à 8 · Preuves » et affiche ce parcours à la place.
+- **Workflow temps réel (SSE)** : `POST /analyze_all_report/stream` diffuse les événements
+  `step` (service, statut `running` / `ok` / `erreur`, détail), `error`, `result` et `status`.
+  La gateway émet ses propres étapes autour des appels réels à `/predict_all` et relaie les
+  événements émis par les nœuds du graphe via `POST /analyze/stream` de l'orchestrateur. Les
+  services indispensables (`api-gateway`, `audio-engine`, `agent-orchestrator`) arrêtent le
+  workflow en cas d'échec ; une panne MLflow est signalée sans bloquer le rapport. L'interface
+  affiche uniquement le nom et le statut de chaque service (`En attente`, `En analyse`, `OK`,
+  `Erreur`, `Terminé`) avec une barre de progression calculée sur les étapes achevées ; le badge
+  final reste « Terminé » seulement si aucune étape n'a échoué.
+- **Tracking MLflow du workflow** : la gateway crée un run dans l'expérience `cardio-workflow`
+  via l'API REST, écrit les tags `step.<service>` / `detail.<service>` et les durées mesurées,
+  puis clôture le run avec `runs/update` (`FINISHED` ou `FAILED`). Le rapport final conserve
+  `workflow_trace` pour permettre un contrôle a posteriori sans dépendre du frontend.
   L'interface affiche ce rapport après les cinq cartes de modèles. Les modèles restent validés sur
   des signaux PCG ; aucune validation ECG n'est revendiquée.
 
 ## 5. Jalon 6 — Tests continus
 
-- **129 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
+- **135 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
   avec faux ONNX), `tests/test_api.py` (proxys gateway avec `httpx` factice),
   `tests/test_agents.py` (graphe, garde-fous FR/EN, audit) et `tests/test_rag.py` (chunking,
   Qdrant mémoire, évaluation).
-- Couverture (`reports/coverage.txt`) : **55 % globale**, 83–100 % sur les services applicatifs.
+- Couverture (`reports/coverage.txt`) : **58 % globale**, 80–100 % sur les services applicatifs.
   Le reste correspond aux utilitaires d'entraînement (`registry.py`, `fold_utils.py`,
   `mlflow_utils.py`, `src/dataset.py`) qui ne sont pas exécutés par les tests de service.
 - Aucun test ne charge de modèle volumineux, n'appelle un service distant ni ne modifie les

@@ -73,7 +73,7 @@ class Orchestrator:
     def __post_init__(self) -> None:
         self._graph = build_graph(self.retriever, self.llm, self.settings)
 
-    def analyze(self, request: AnalyzeRequest) -> AnalyzeResponse:
+    def analyze(self, request: AnalyzeRequest, emit=None) -> AnalyzeResponse:
         started = perf_counter()
         audio = audio_from_request(request)
         mode = request.mode
@@ -112,6 +112,8 @@ class Orchestrator:
             "workflow_summary": summary,
             "factual_report": facts,
         }
+        if emit is not None:
+            initial_state["emit"] = emit
         final = self._graph.invoke(initial_state)
 
         resolved_language = final.get("language") or language

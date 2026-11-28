@@ -32,3 +32,6 @@ class AnalysisState(TypedDict, total=False):
     warnings: list[str]
     refusal_applied: bool
     emergency_redirect: bool
+    # Callback optionnel injecté par /analyze/stream : émet les changements
+    # d'étape réels (jamais simulés) vers la passerelle puis l'interface.
+    emit: Any | None

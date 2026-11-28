@@ -6,11 +6,14 @@ Les sorties sont validées par Pydantic (``AnalyzeResponse``).
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from agents.clients import LLM, OllamaClient, QdrantRetriever, Retriever
 from agents.config import Settings
@@ -59,7 +62,7 @@ def create_app(
             "service": "agent-orchestrator",
             "status": "ok",
             "graph": ["analyste", "cardiologue_rag", "auditeur"],
-            "endpoints": ["/health", "/analyze", "/docs"],
+            "endpoints": ["/health", "/analyze", "/analyze/stream", "/docs"],
         }
 
     @app.get("/health")
@@ -87,6 +90,55 @@ def create_app(
         except Exception as error:
             logger.exception("Échec de l'orchestration")
             raise HTTPException(status_code=503, detail=f"Orchestrateur indisponible: {error}") from error
+
+    @app.post("/analyze/stream")
+    async def analyze_stream(request: AnalyzeRequest):
+        """Flux SSE des étapes réellement exécutées par le graphe LangGraph."""
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+        def emit(event: dict[str, Any]) -> None:
+            loop.call_soon_threadsafe(
+                queue.put_nowait, {"event": "step", "data": event}
+            )
+
+        def work() -> None:
+            try:
+                response = orchestrator.analyze(request, emit=emit)
+            except Exception as error:
+                logger.exception("Échec de l'orchestration en flux")
+                loop.call_soon_threadsafe(
+                    queue.put_nowait,
+                    {"event": "error", "data": {"detail": f"{type(error).__name__}: {error}"}},
+                )
+            else:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait,
+                    {"event": "result", "data": response.model_dump(mode="json")},
+                )
+
+        async def events() -> AsyncIterator[str]:
+            task = asyncio.create_task(asyncio.to_thread(work))
+            try:
+                while True:
+                    item = await queue.get()
+                    payload = json.dumps(item["data"], ensure_ascii=False)
+                    yield f"event: {item['event']}\ndata: {payload}\n\n"
+                    if item["event"] in {"result", "error"}:
+                        break
+            finally:
+                if not task.done():
+                    task.cancel()
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app
 
