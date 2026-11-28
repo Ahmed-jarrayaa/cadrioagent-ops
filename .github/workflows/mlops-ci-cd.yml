@@ -1,0 +1,103 @@
+name: MLOps CI/CD — CardioAgent-Ops
+
+# Jalon 8 : tests + contrôle de couverture à chaque commit, puis build de l'API Gateway
+# (endpoint /analyze_pcg) et validation de la composition des 6 micro-services.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Pytest + couverture
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            rag_engine/requirements.txt
+            docker/agent-orchestrator/requirements.txt
+
+      - name: Installer les dépendances de test et des services
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt \
+            -r rag_engine/requirements.txt \
+            -r docker/agent-orchestrator/requirements.txt
+
+      - name: Suite Pytest et couverture
+        run: >-
+          python -m pytest -q --cov
+          --cov-report=term-missing
+          --cov-report=xml:reports/coverage.xml
+          --cov-fail-under=45
+
+      - name: Archiver le rapport XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: reports/coverage.xml
+          if-no-files-found: error
+
+  docker:
+    name: Docker — 6 services et API Gateway
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Valider docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Build de l'image de l'API Gateway
+        run: docker build -f docker/api-gateway/Dockerfile -t cardioagent-api-gateway:ci .
+
+      - name: Démarrer l'API Gateway
+        run: |
+          docker run -d --name cardioagent-ci-gateway -p 8085:8000 \
+            -e AUDIO_ENGINE_URL=http://127.0.0.1:1 \
+            -e ORCHESTRATOR_URL=http://127.0.0.1:1 \
+            -e MLFLOW_URL=http://127.0.0.1:1 \
+            cardioagent-api-gateway:ci
+
+      - name: Vérifier /analyze_pcg et /health
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8085/ > /tmp/gateway-root.json; then break; fi
+            sleep 1
+          done
+          python - <<'PY'
+          import json
+          import urllib.request
+
+          with open("/tmp/gateway-root.json", encoding="utf-8") as handle:
+              root = json.load(handle)
+          assert "/analyze_pcg" in root["endpoints"], root
+
+          with urllib.request.urlopen("http://127.0.0.1:8085/health", timeout=10) as response:
+              health = json.load(response)
+          assert health["status"] == "ok", health
+          assert health["services"]["api-gateway"] == "ok"
+          print("API Gateway OK — endpoints:", ", ".join(root["endpoints"]))
+          PY
+
+      - name: Nettoyage
+        if: always()
+        run: docker rm -f cardioagent-ci-gateway || true

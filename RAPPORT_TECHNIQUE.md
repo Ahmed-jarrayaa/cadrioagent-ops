@@ -1,0 +1,140 @@
+# CardioAgent-Ops — Rapport technique consolidé
+
+> Projet académique (Semestre 1 — 3GMAM, Data Mining). **Aucun élément de ce dépôt n'est un
+> dispositif médical** : les scores audio sont des tests de dépistage et l'assistant ne pose
+> jamais de diagnostic ni de prescription.
+
+Ce rapport consolide les preuves produites aux jalons 1 à 8. Les chiffres cités proviennent
+des rapports JSON/Markdown versionnés et de l'exécution réelle sur la machine de développement.
+
+---
+
+## 1. Périmètre et données
+
+- Deux seules sources documentaires : `rag_engine/Auscultation-cardiaque-normale-4-4.pdf` et
+  `rag_engine/S127979602300089X.pdf` (article CC BY-NC 4.0 ; cours à droits non explicités,
+  usage académique interne). Aucune donnée patient réelle, aucun fait médical inventé.
+- Audio : fusion PASCAL + PhysioNet, rééchantillonnage 2 000 Hz, filtre passe-bande 25–400 Hz,
+  fenêtres de 5 s avec recouvrement 50 %, 46 caractéristiques (20 MFCC moyens + 20 écarts-types
+  + ZCR, centroïde spectral, RMS). Le prétraitement de `audio_engine/preprocess.py` est celui
+  du notebook `01_eda_data_wrangling.ipynb` ; il n'a pas été modifié.
+- Jeu LLM : 450 entraînement / 70 validation / 70 test (split sans fuite par document).
+
+## 2. Jalon 2 — Benchmark audio (5 algorithmes)
+
+Métriques moyennes des plis (GroupKFold par enregistrement), lues dans les métadonnées MLflow
+de `audio_engine/models/best_*_meta.json` :
+
+| Modèle | Accuracy | Balanced accuracy | Macro-recall | Macro-F1 | ROC-AUC |
+|---|---:|---:|---:|---:|---:|
+| SVM RBF | **0,859** | 0,883 | 0,883 | **0,831** | **0,936** |
+| CNN 2D (Mel) | 0,840 | **0,885** | **0,885** | 0,812 | — |
+| Transfer Learning VGG16 | 0,840 | 0,885 | 0,885 | 0,811 | — |
+| Transfer Learning ResNet50 | 0,836 | 0,877 | 0,877 | 0,806 | — |
+| Transfer Learning ResNet18 | 0,835 | 0,876 | 0,876 | 0,805 | — |
+| Transformer-CNN Hybride | 0,746 | 0,685 | 0,685 | 0,670 | — |
+| Arbre de décision | 0,811 | 0,832 | 0,832 | 0,779 | 0,883 |
+
+Le **SVM RBF** est le modèle exporté en ONNX (`cardio_model.onnx`, 44,7 Mo) : meilleur ROC-AUC
+et meilleur F1, avec un seuil stable. Les cinq familles restent servies par `/predict_all` et
+`/predict_one` ; chaque run est tracé dans l'expérience MLflow `tp3_audio_engine`. Le CNN et le
+transfer learning atteignent un rappel comparable mais avec des artefacts 100 à 500 fois plus
+lourds.
+
+## 3. Jalon 3 — Fine-tuning QLoRA et registre
+
+| Élément | Résultat |
+|---|---|
+| Base livrée | `Qwen/Qwen2.5-1.5B-Instruct` (QLoRA 4-bit) |
+| Entraînement | 112 pas, `eval_loss` 1,148, run MLflow `dc59b2d7b9ac4e15811df74c238b8e5b` |
+| Test indépendant | base vs fine-tuné dans `llm_finetuning/reports/local_1_5b_evaluation.md` |
+| Export | `cardio-llm-q4_k_m.gguf`, 986 048 320 octets (940,4 Mo), SHA-256 `e8d53970f45d67b3ccc612d8777af23854d0a25abba85e70e11711fc0bf0dfcd` |
+| Ollama | `cardio-llm:latest` servi par `llm-server` (vérifié en Docker) |
+
+La configuration 7B (`configs/qlora_qwen25_7b.yaml`) reste la cible du PDF mais n'a pas pu être
+exécutée localement : la machine dispose d'une **RTX 2050 de 4 Go de VRAM**. La fusion du 1.5B a
+été faite sur CPU (`--merge-device cpu`) pour ne pas saturer cette VRAM. L'évaluation indépendante
+utilise F1 / ROUGE-L / BLEU ; `exact_match = 0` car les réponses sont paraphrasées. Ces métriques
+n'ont **aucune valeur clinique** : le LLM ne remplace ni le RAG ni un professionnel.
+
+## 4. Jalons 4 et 5 — RAG et multi-agents
+
+- **RAG** : `BAAI/bge-m3` (1 024 dimensions, similarité cosinus), collection Qdrant
+  `cardio_docs`, **66 passages**, seuil `min_score = 0,35`, **6/6 questions validées**
+  (`rag_engine/reports/rag_evaluation.json`). Les IDs de passages sont des SHA-256 stables :
+  l'indexation est idempotente.
+- **Graphe LangGraph** : `START → Analyste → Cardiologue RAG → Auditeur → END`, contrats
+  Pydantic `AnalyzeRequest` / `AnalyzeResponse`.
+- **Garde-fous** : diagnostic, prescription et urgence produisent un refus **déterministe** sans
+  appel au LLM ; absence de source ⇒ abstention ; l'auditeur remplace toute réponse non ancrée
+  ou contenant un dosage interdit ; un score audio est toujours requalifié en dépistage.
+- Preuve réelle : `agents/reports/agent_smoke_1_5b.json`, **8/8 audits OK**. Limitations
+  documentées : audit lexical (pas de vérification de la vérité médicale) et avertissements
+  `cross_lingual_grounding` / `language_mismatch` quand le 1.5B répond en français à une question
+  anglaise.
+
+## 5. Jalon 6 — Tests continus
+
+- **117 tests passed** (`pytest -q`) couvrant `tests/test_audio.py` (signal synthétique + API
+  avec faux ONNX), `tests/test_api.py` (proxys gateway avec `httpx` factice),
+  `tests/test_agents.py` (graphe, garde-fous FR/EN, audit) et `tests/test_rag.py` (chunking,
+  Qdrant mémoire, évaluation).
+- Couverture (`reports/coverage.txt`) : **51 % globale**, 83–100 % sur les services applicatifs.
+  Le reste correspond aux utilitaires d'entraînement (`registry.py`, `fold_utils.py`,
+  `mlflow_utils.py`, `src/dataset.py`) qui ne sont pas exécutés par les tests de service.
+- Aucun test ne charge de modèle volumineux, n'appelle un service distant ni ne modifie les
+  notebooks ou l'audio-engine.
+
+## 6. Jalon 7 — Architecture Docker
+
+Six micro-services sur le réseau `docker-network` :
+
+| Service | Image de base | Port hôte | Dépendances | Volume persistant |
+|---|---|---:|---|---|
+| `api-gateway` | `python:3.10-slim` (multi-stage) | 8085 | audio-engine, agent-orchestrator | — |
+| `audio-engine` | `python:3.10-slim` (multi-stage) | interne 8001 | mlflow-server | `./audio_engine/models:ro` |
+| `agent-orchestrator` | `python:3.10-slim` (multi-stage) | interne 8002 | llm-server, vector-db, mlflow-server | `hf_cache` |
+| `llm-server` | `ollama/ollama` | 11434 | — | `ollama_data`, `./llm_finetuning/export:ro` |
+| `vector-db` | `qdrant/qdrant` | 6333 | — | `qdrant_data` |
+| `mlflow-server` | `python:3.10-slim` | 5000 | — | `mlflow_data` |
+
+Commande de démarrage : `docker compose up -d --build`, puis `docker compose ps`.
+Le build multi-stage installe les dépendances dans un étage `builder` et ne copie que
+`/install` dans l'image finale. L'orchestrateur utilise PyTorch **CPU** et le cache Hugging Face
+persistant pour `bge-m3` (premier appel ~33–37 s, appels suivants ~1–2 s). Voir le §9 du README
+pour les commandes de vérification et la note sur le GPU NVIDIA.
+
+## 7. Jalon 8 — Pipeline CI/CD
+
+`.github/workflows/mlops-ci-cd.yml` (push / PR sur `main`, `workflow_dispatch`) :
+
+1. job `tests` : Python 3.10, installation des dépendances, `pytest --cov` avec seuil minimal
+   de couverture, archivage de `reports/coverage.xml` ;
+2. job `docker` : `docker compose config --quiet`, build de l'image de l'API Gateway,
+   démarrage du conteneur sur 8085 et contrôle que `/` expose `/analyze_pcg` et que `/health`
+   répond `ok`.
+
+Le pipeline ne télécharge aucun poids volumineux et ne nécessite ni GPU ni secret GitHub.
+
+## 8. Consommation mémoire / VRAM
+
+| Composant | Mesure / ordre de grandeur observé |
+|---|---|
+| Poste de travail | Windows, **RTX 2050 — 4 Go de VRAM** |
+| QLoRA 1.5B | 4-bit sur GPU, fusion sur CPU (fp32 → fp16 avant sauvegarde) |
+| QLoRA 7B | non exécuté : nécessite ≥ 12 Go de VRAM (GPU externes/outils type Colab) |
+| GGUF livré | 940,4 Mo sur disque ; chargement dans Ollama au premier appel (~43 s) |
+| ONNX audio | 44,7 Mo ; inférence CPU (`CPUExecutionProvider`) |
+| `bge-m3` | chargement CPU au premier appel RAG (~33–37 s), puis mis en cache dans `hf_cache` |
+| Qdrant | 66 passages vectoriels 1 024 dims (~0,3 Mo de vecteurs) |
+
+## 9. Licences et limites
+
+- Article : CC BY-NC 4.0. Cours universitaire : droits non explicités, **usage académique
+  interne uniquement**, non redistribué.
+- Les jeux de données audio appartiennent à leurs auteurs respectifs (PhysioNet, PASCAL) et
+  sont soumis à leurs propres licences.
+- Le fichier `.gguf`, les caches Hugging Face et les artefacts volumineux sont volontairement
+  exclus de Git ; `README.md` §16 indique comment les régénérer.
+- **Ce logiciel n'est pas un dispositif médical.** Il ne doit ni poser de diagnostic ni orienter
+  une prise en charge clinique.

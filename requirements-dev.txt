@@ -7,3 +7,7 @@ fastapi>=0.115,<1
 python-multipart>=0.0.9
 soundfile>=0.12
 numpy>=1.26,<3
+scipy>=1.11
+librosa>=0.10
+pypdf>=4.0
+qdrant-client>=1.12

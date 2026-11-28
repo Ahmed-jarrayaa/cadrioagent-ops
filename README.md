@@ -830,3 +830,22 @@ Aucun test ne charge de poids volumineux, n'appelle un service distant ni ne mod
 notebooks, le modèle ONNX ou `audio_engine/`. Une correction de sécurité a été ajoutée au
 classifieur d'intention : les formulations anglaises « *Please diagnose* / *Can you diagnose* »
 sont désormais refusées déterminístiquement.
+
+---
+
+## 19. Pipeline CI/CD (Jalon 8)
+
+Le workflow `.github/workflows/mlops-ci-cd.yml` s'exécute à chaque `push` et `pull request` sur
+`main` (et manuellement via `workflow_dispatch`) :
+
+1. **Job `tests`** — Python 3.10, installation des dépendances de test + RAG + orchestrateur,
+   suite Pytest complète avec couverture (`--cov-fail-under=45`) et archivage de
+   `reports/coverage.xml` ;
+2. **Job `docker`** (après succès des tests) — validation de `docker-compose.yml`
+   (`docker compose config --quiet`), build de l'image de l'**API Gateway**, démarrage du
+   conteneur sur `8085` et contrôle que `/` expose bien `/analyze_pcg` et que `/health`
+   répond `ok`.
+
+Le pipeline ne télécharge aucun modèle volumineux et ne nécessite ni GPU ni secrets GitHub.
+Les tests `tests/test_api.py` valident déjà le chaînage `/analyze_pcg` → `audio-engine` →
+`agent-orchestrator` avec un transport `httpx` factice, sans conteneur.
